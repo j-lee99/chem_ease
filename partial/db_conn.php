@@ -4,13 +4,13 @@ date_default_timezone_set('Asia/Manila');
 
 // Database configuration
 // $host = 'localhost';
-$host = '127.0.0.1';
-// $dbname = 'u880179925_chemease';
-$dbname = 'chem_ease';
-// $username = 'u880179925_root';
-$username = 'root';
-// $password = 'Chemease123.';
-$password = '';
+// $host = '127.0.0.1';
+$dbname = 'u880179925_chemease';
+// $dbname = 'chem_ease';
+$username = 'u880179925_root';
+// $username = 'root';
+$password = 'Chemease123.';
+// $password = '';
 
 $conn = new mysqli($host, $username, $password, $dbname, 3306);
 
