@@ -1334,7 +1334,7 @@
 
             if (bestScore !== null && bestScore !== 'null' && bestScore !== 'undefined') {
                 console.log(bestScore)
-                document.getElementById('detailsBestScore').textContent = bestScore + '%';
+                document.getElementById('detailsBestScore').textContent = `${bestScore}/${questions}`;
                 document.getElementById('bestScoreRow').style.display = 'block';
                 document.getElementById('startFromDetailsText').textContent = 'Retake Exam';
             } else {
