@@ -1267,7 +1267,7 @@
                         ${
                             e.user_score !== null && e.user_score !== undefined
                                 ? `<small class="d-block text-center text-success mt-2">
-                                        Your best: ${e.user_score}%
+                                        Your best: ${e.user_score}/${totalItems}
                                    </small>`
                                 : ''
                         }
