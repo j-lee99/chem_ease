@@ -21,7 +21,7 @@ function generateUserUUID(mysqli $conn, string $roleCode): string
     $stmt = $conn->prepare("
         SELECT COUNT(*) + 1 AS seq
         FROM users
-        WHERE user_uuid LIKE CONCAT(?, '-', ?, '-%')
+        WHERE u_uid LIKE CONCAT(?, '-', ?, '-%')
     ");
     $stmt->bind_param("ss", $year, $roleCode);
     $stmt->execute();
@@ -147,7 +147,7 @@ $userUUID = generateUserUUID($conn, $roleCode);
 
 $stmt = $conn->prepare("
     INSERT INTO users
-    (user_uuid, full_name, email, mobile, birthday, address, password, verification_token, is_verified)
+    (u_uid, full_name, email, mobile, birthday, address, password, verification_token, is_verified)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0)
 ");
 
