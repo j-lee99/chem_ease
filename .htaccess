@@ -1,0 +1,32 @@
+<IfModule mod_rewrite.c>
+    RewriteEngine On
+    RewriteBase /
+
+    # ── PROTECT /partial/ folder ──
+    # Do NOT rewrite anything starting with /partial/
+    RewriteRule ^partial/ - [L]
+
+    # ── Remove .php extension for normal pages ──
+    RewriteCond %{REQUEST_FILENAME} !-d
+    RewriteCond %{REQUEST_FILENAME}\.php -f
+    RewriteRule ^(.+?)/?$ $1.php [L]
+
+    # ── Redirect if someone types .php explicitly (SEO) ──
+    RewriteCond %{THE_REQUEST} \s/([^?\s]+)\.php(?:\s|\?)
+    RewriteRule ^ /%1 [R=301,L]
+
+    # ── Optional: Force trailing slash on folders ──
+    RewriteCond %{REQUEST_FILENAME} -d
+    RewriteCond %{REQUEST_URI} !/$
+    RewriteRule ^(.*)$ /$1/ [R=301,L]
+
+    # ── Protect sensitive files ──
+    RewriteRule ^(.git|composer\.json|vendor|node_modules|partial/db_conn\.php) - [F,L]
+
+    <Files ".htaccess">
+        Order allow,deny
+        Deny from all
+    </Files>
+</IfModule>
+
+ErrorDocument 404 /404.php

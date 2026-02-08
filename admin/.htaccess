@@ -1,0 +1,38 @@
+<IfModule mod_rewrite.c>
+    RewriteEngine On
+    RewriteBase /admin/
+
+    # ────────────────────────────────────────────────────────────────
+    # 1. Remove .php extension inside /admin/ only
+    #    Examples:
+    #    /admin/index.php   → /admin/
+    #    /admin/Users.php   → /admin/Users
+    #    /admin/Practice_Exams.php → /admin/Practice_Exams
+    # ────────────────────────────────────────────────────────────────
+    RewriteCond %{REQUEST_FILENAME} !-d
+    RewriteCond %{REQUEST_FILENAME}\.php -f
+    RewriteRule ^([^/]+?)/?$ $1.php [L]
+
+    # ────────────────────────────────────────────────────────────────
+    # 2. Redirect if someone types .php explicitly inside /admin/
+    #    (SEO: /admin/index.php → /admin/)
+    # ────────────────────────────────────────────────────────────────
+    RewriteCond %{THE_REQUEST} \s/admin/([^?\s]+)\.php(?:\s|\?)
+    RewriteRule ^ /admin/%1 [R=301,L,NE]
+
+    # ────────────────────────────────────────────────────────────────
+    # 3. Force trailing slash on directories inside /admin/
+    #    (consistency: /admin/Users → /admin/Users/)
+    # ────────────────────────────────────────────────────────────────
+    RewriteCond %{REQUEST_FILENAME} -d
+    RewriteCond %{REQUEST_URI} !/$
+    RewriteRule ^(.*)$ /$1/ [R=301,L]
+
+    # ────────────────────────────────────────────────────────────────
+    # 4. IMPORTANT: Do NOT block or rewrite requests to ../partial/
+    #    Your JS fetch calls like ../partial/delete_user.php must work
+    #    → we already protected /partial/ in root .htaccess
+    # ────────────────────────────────────────────────────────────────
+    # (No rule needed here — root already handles it)
+
+</IfModule>
