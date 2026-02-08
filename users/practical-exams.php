@@ -1332,7 +1332,7 @@
             console.log(duration)
             console.log(bestScore)
 
-            if (bestScore !== null && bestScore !== 'null' && bestScore !== 0 && bestScore !== 'undefined') {
+            if (bestScore !== null && bestScore !== 'null' && bestScore !== 'undefined') {
                 console.log(bestScore)
                 document.getElementById('detailsBestScore').textContent = bestScore + '%';
                 document.getElementById('bestScoreRow').style.display = 'block';
