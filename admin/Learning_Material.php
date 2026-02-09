@@ -9,6 +9,7 @@ if (!isset($_SESSION['user_id']) || $_SESSION['role'] !== 'admin') {
 ?>
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -57,7 +58,46 @@ if (!isset($_SESSION['user_id']) || $_SESSION['role'] !== 'admin') {
             --light: #f8f9fa;
             --dark: #343a40;
         }
-        .file-list { margin: 1rem 0; }
+
+        /* Make each category section span the full width of your existing .materials-grid */
+        .category-section {
+            grid-column: 1 / -1;
+            margin-bottom: 16px;
+        }
+
+        /* Folder header */
+        .category-header {
+            background: #ffffff;
+            padding: 10px 14px;
+            border-radius: 10px;
+            cursor: pointer;
+            border: 1px solid #e5e7eb;
+            margin-bottom: 12px;
+        }
+
+        .category-header:hover {
+            background: #f8fafc;
+        }
+
+        /* Inner grid that holds the SAME card layout (grid cards like before) */
+        .category-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+            gap: 18px;
+        }
+
+        /* Chevron rotate animation */
+        .rotate {
+            transform: rotate(180deg);
+            transition: .25s ease;
+        }
+
+
+
+        .file-list {
+            margin: 1rem 0;
+        }
+
         .file-item {
             display: flex;
             align-items: center;
@@ -68,25 +108,45 @@ if (!isset($_SESSION['user_id']) || $_SESSION['role'] !== 'admin') {
             transition: all 0.3s;
             border-left: 4px solid var(--primary);
         }
+
         .file-item:hover {
             background: #e3f2fd;
             transform: translateX(5px);
         }
+
         .file-item i {
             font-size: 1.8rem;
             margin-right: 1rem;
             color: var(--primary);
         }
-        .file-item.pdf i { color: #dc3545; }
-        .file-item.youtube i { color: #ff0000; }
+
+        .file-item.pdf i {
+            color: #dc3545;
+        }
+
+        .file-item.youtube i {
+            color: #ff0000;
+        }
+
         .file-item a {
             color: var(--primary);
             font-weight: 600;
             text-decoration: none;
         }
-        .file-item a:hover { text-decoration: underline; }
-        .modal-header { background: var(--primary); color: white; }
-        .modal-title { font-weight: 700; }
+
+        .file-item a:hover {
+            text-decoration: underline;
+        }
+
+        .modal-header {
+            background: var(--primary);
+            color: white;
+        }
+
+        .modal-title {
+            font-weight: 700;
+        }
+
         .editable-file-name {
             flex: 1;
             margin: 0 0.5rem;
@@ -95,6 +155,7 @@ if (!isset($_SESSION['user_id']) || $_SESSION['role'] !== 'admin') {
             border-radius: 6px;
             font-size: 0.95rem;
         }
+
         .delete-file-btn {
             color: var(--danger);
             background: none;
@@ -103,7 +164,11 @@ if (!isset($_SESSION['user_id']) || $_SESSION['role'] !== 'admin') {
             cursor: pointer;
             padding: 0.3rem 0.6rem;
         }
-        .delete-file-btn:hover { color: #c82333; }
+
+        .delete-file-btn:hover {
+            color: #c82333;
+        }
+
         /* Pagination */
         .pagination-container {
             display: flex;
@@ -113,6 +178,7 @@ if (!isset($_SESSION['user_id']) || $_SESSION['role'] !== 'admin') {
             gap: 0.8rem;
             margin: 3rem 0 1rem;
         }
+
         .pagination-btn {
             min-width: 44px;
             height: 44px;
@@ -123,29 +189,35 @@ if (!isset($_SESSION['user_id']) || $_SESSION['role'] !== 'admin') {
             font-weight: 600;
             transition: all 0.3s;
         }
+
         .pagination-btn:hover:not(:disabled) {
             border-color: var(--primary);
             color: var(--primary);
             transform: translateY(-2px);
         }
+
         .pagination-btn.active {
             background: var(--primary);
             border-color: var(--primary);
             color: white;
         }
+
         .pagination-btn:disabled {
             opacity: 0.5;
             cursor: not-allowed;
         }
+
         .load-more-btn {
             padding: 0.8rem 2rem;
             font-size: 1.1rem;
             border-radius: 12px;
         }
+
         .material-actions .btn {
             font-size: 0.85rem;
             padding: 0.4rem 0.8rem;
         }
+
         /* ── Upload Preview Styles ─────────────────────────────────────── */
         .upload-preview-container {
             margin-top: 1rem;
@@ -156,6 +228,7 @@ if (!isset($_SESSION['user_id']) || $_SESSION['role'] !== 'admin') {
             max-height: 220px;
             overflow-y: auto;
         }
+
         .preview-item {
             display: flex;
             align-items: center;
@@ -164,29 +237,40 @@ if (!isset($_SESSION['user_id']) || $_SESSION['role'] !== 'admin') {
             background: white;
             border-radius: 8px;
             margin-bottom: 0.6rem;
-            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
             cursor: pointer;
             transition: background 0.2s;
         }
+
         .preview-item:hover {
             background: #f0f8ff;
         }
+
         .preview-item i {
             font-size: 1.6rem;
             margin-right: 1rem;
         }
-        .preview-item.pdf i { color: #dc3545; }
-        .preview-item.youtube i { color: #ff0000; }
+
+        .preview-item.pdf i {
+            color: #dc3545;
+        }
+
+        .preview-item.youtube i {
+            color: #ff0000;
+        }
+
         .preview-filename {
             flex: 1;
             font-weight: 500;
             font-size: 0.95rem;
         }
+
         .preview-size {
             color: #6c757d;
             font-size: 0.85rem;
             margin-left: 1rem;
         }
+
         .remove-preview-btn {
             color: #dc3545;
             background: none;
@@ -196,7 +280,11 @@ if (!isset($_SESSION['user_id']) || $_SESSION['role'] !== 'admin') {
             padding: 0.4rem;
             margin-left: 0.8rem;
         }
-        .remove-preview-btn:hover { color: #c82333; }
+
+        .remove-preview-btn:hover {
+            color: #c82333;
+        }
+
         .youtube-preview-list {
             margin-top: 0.5rem;
             padding: 0.8rem;
@@ -204,6 +292,7 @@ if (!isset($_SESSION['user_id']) || $_SESSION['role'] !== 'admin') {
             border-radius: 8px;
             border: 1px dashed #ffcccc;
         }
+
         .youtube-preview-item {
             display: flex;
             align-items: center;
@@ -215,6 +304,7 @@ if (!isset($_SESSION['user_id']) || $_SESSION['role'] !== 'admin') {
         }
     </style>
 </head>
+
 <body>
     <!-- Sidebar -->
     <div class="sidebar">
@@ -255,14 +345,14 @@ if (!isset($_SESSION['user_id']) || $_SESSION['role'] !== 'admin') {
                     <div class="stat-card">
                         <div class="stat-info">
                             <div class="stat-label">Total Materials</div>
-                            <div class="stat-number"><?=$total?></div>
+                            <div class="stat-number"><?= $total ?></div>
                         </div>
                         <div class="stat-icon blue"><i class="fas fa-book-open"></i></div>
                     </div>
                     <div class="stat-card">
                         <div class="stat-info">
                             <div class="stat-label">Total Files/Videos</div>
-                            <div class="stat-number"><?=$files?></div>
+                            <div class="stat-number"><?= $files ?></div>
                         </div>
                         <div class="stat-icon green"><i class="fas fa-file-alt"></i></div>
                     </div>
@@ -406,25 +496,9 @@ if (!isset($_SESSION['user_id']) || $_SESSION['role'] !== 'admin') {
             </div>
         </div>
     </div>
-
-    <!-- View Modal -->
-    <div class="modal fade" id="viewModal" tabindex="-1" data-bs-backdrop="static" data-bs-keyboard="false">
-        <div class="modal-dialog modal-lg">
-            <div class="modal-content">
-                <div class="modal-header bg-primary text-white">
-                    <h5 class="modal-title text-white">Material Files</h5>
-                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
-                </div>
-                <div class="modal-body" id="modalFileList">
-                    Loading files...
-                </div>
-            </div>
-        </div>
-    </div>
-
     <script src="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.0/js/bootstrap.bundle.min.js"></script>
     <script>
-        document.addEventListener('DOMContentLoaded', function () {
+        document.addEventListener('DOMContentLoaded', function() {
             function toggleSidebar() {
                 document.querySelectorAll('.sidebar, .top-navbar, .main-content').forEach(el => el.classList.toggle('collapsed'));
                 const i = document.querySelector('.collapse-btn i');
@@ -446,35 +520,16 @@ if (!isset($_SESSION['user_id']) || $_SESSION['role'] !== 'admin') {
                     grid.innerHTML = '<div class="text-center py-5"><div class="spinner-border text-primary"></div><p class="mt-3 text-muted">Loading...</p></div>';
                 }
                 try {
-                    const url = `../partial/get_materials_paginated.php?page=${page}&search=${encodeURIComponent(currentSearch)}`;
+                    // const url = `../partial/get_materials_paginated.php?page=${page}&search=${encodeURIComponent(currentSearch)}`;
+                    const url = `../partial/get_materials_paginated.php?all=1&search=${encodeURIComponent(currentSearch)}`;
                     const resp = await fetch(url);
+                    console.log(resp)
                     const data = await resp.json();
                     if (!append) grid.innerHTML = '';
-                    if (!data.materials || data.materials.length === 0) {
+                    if (!data.folders || Object.keys(data.folders).length === 0) {
                         grid.innerHTML = '<div class="text-center py-5"><p class="text-muted fs-5">No materials found.</p></div>';
                     } else {
-                        data.materials.forEach(row => {
-                            const catClass = row.category.toLowerCase().replace(/ /g, '-');
-                            grid.innerHTML += `
-                            <div class="material-card clickable-card" data-id="${row.id}" style="cursor:pointer;">
-                                <div class="material-thumbnail ${catClass}">
-                                    <div class="material-placeholder"><i class="fas fa-book"></i></div>
-                                </div>
-                                <div class="material-content">
-                                    <h3 class="material-title">${row.title}</h3>
-                                    <div class="material-type"><span>${row.file_count} item(s)</span></div>
-                                    <span class="material-category ${catClass}">${row.category}</span>
-                                </div>
-                                <div class="material-actions">
-                                    <button class="btn btn-sm btn-outline-primary edit-btn me-1" data-id="${row.id}">
-                                        <i class="fas fa-edit"></i> Edit
-                                    </button>
-                                    <button class="btn btn-sm btn-outline-danger delete-btn" data-id="${row.id}" onclick="event.stopPropagation();">
-                                        <i class="fas fa-trash"></i> Delete
-                                    </button>
-                                </div>
-                            </div>`;
-                        });
+                        renderFolders(data.folders || {});
                     }
                     totalPages = data.total_pages || 1;
                     currentPage = data.current_page || 1;
@@ -516,7 +571,10 @@ if (!isset($_SESSION['user_id']) || $_SESSION['role'] !== 'admin') {
                 if (page < 1 || page > totalPages || page === currentPage) return;
                 currentPage = page;
                 loadMaterials(page, false);
-                window.scrollTo({ top: 0, behavior: 'smooth' });
+                window.scrollTo({
+                    top: 0,
+                    behavior: 'smooth'
+                });
             };
 
             document.getElementById('loadMoreBtn')?.addEventListener('click', () => {
@@ -537,7 +595,9 @@ if (!isset($_SESSION['user_id']) || $_SESSION['role'] !== 'admin') {
                         try {
                             const resp = await fetch('../partial/delete_material_api.php', {
                                 method: 'POST',
-                                headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                                headers: {
+                                    'Content-Type': 'application/x-www-form-urlencoded'
+                                },
                                 body: 'id=' + btn.dataset.id
                             });
                             const data = await resp.json();
@@ -561,40 +621,89 @@ if (!isset($_SESSION['user_id']) || $_SESSION['role'] !== 'admin') {
                 });
 
                 document.querySelectorAll('.clickable-card').forEach(card => {
-                    card.onclick = async () => {
+                    card.onclick = () => {
                         const id = card.dataset.id;
-                        const modalEl = document.getElementById('viewModal');
-                        if (!modalEl) return;
-                        const modal = new bootstrap.Modal(modalEl);
-                        const list = document.getElementById('modalFileList');
-                        if (!list) return;
-                        list.innerHTML = '<p class="text-center py-4"><i class="fas fa-spinner fa-spin"></i> Loading...</p>';
-                        try {
-                            const resp = await fetch(`../partial/get_material_files.php?id=${id}`);
-                            const data = await resp.json();
-                            let html = '<div class="file-list">';
-                            if (data.pdfs?.length) {
-                                data.pdfs.forEach(f => {
-                                    html += `<div class="file-item pdf"><i class="fas fa-file-pdf"></i><div><strong>PDF FILE</strong><br><a href="../${f.path}" target="_blank">${f.path.split('/').pop()}</a></div></div>`;
-                                });
-                            }
-                            if (data.videos?.length) {
-                                data.videos.forEach(v => {
-                                    html += `<div class="file-item youtube"><i class="fas fa-play-circle"></i><div><strong>YouTube Video</strong><br><a href="${v.path}" target="_blank">${v.path}</a></div></div>`;
-                                });
-                            }
-                            if (!data.pdfs?.length && !data.videos?.length) {
-                                html += '<p class="text-center text-muted py-4">No files or videos uploaded yet.</p>';
-                            }
-                            html += '</div>';
-                            list.innerHTML = html;
-                            modal.show();
-                        } catch (err) {
-                            list.innerHTML = '<p class="text-danger">Error loading files.</p>';
-                        }
+                        window.location.href = `View_Material.php?id=${id}`;
                     };
                 });
             }
+
+            function renderFolders(folders) {
+                const grid = document.getElementById('materialsGrid');
+                grid.innerHTML = '';
+
+                const categoryOrder = [
+                    "Analytical Chemistry",
+                    "Organic Chemistry",
+                    "Physical Chemistry",
+                    "Inorganic Chemistry",
+                    "BioChemistry"
+                ];
+
+                categoryOrder.forEach(category => {
+                    const materials = folders?.[category] ?? [];
+
+                    const section = document.createElement('div');
+                    section.className = 'category-section';
+
+                    section.innerHTML = `
+            <div class="category-header d-flex align-items-center" onclick="toggleCategory(this)">
+                <div class="d-flex align-items-center gap-2">
+                    <i class="fas fa-folder text-warning"></i>
+                    <span class="fw-semibold">${category}</span>
+                    <span class="badge bg-secondary">${materials.length}</span>
+                </div>
+                <i class="fas fa-chevron-down ms-auto"></i>
+            </div>
+
+            <div class="category-content d-none">
+                <div class="category-grid"></div>
+                ${materials.length === 0 ? `<div class="text-muted small mt-2">No materials in this category.</div>` : ``}
+            </div>
+        `;
+
+                    const innerGrid = section.querySelector('.category-grid');
+                    materials.forEach(row => {
+                        innerGrid.insertAdjacentHTML('beforeend', buildMaterialCard(row));
+                    });
+
+                    grid.appendChild(section);
+                });
+
+                attachCardEvents();
+            }
+
+
+
+
+
+            window.toggleCategory = function(header) {
+                const content = header.nextElementSibling;
+                content.classList.toggle('d-none');
+                header.querySelector('.fa-chevron-down')?.classList.toggle('rotate');
+            };
+
+
+
+            function buildMaterialCard(row) {
+                const catClass = row.category.toLowerCase().replace(/ /g, '-');
+
+                return `
+    <div class="material-card clickable-card" data-id="${row.id}" style="cursor:pointer;">
+      <div class="material-thumbnail ${catClass}">
+        <div class="material-placeholder"><i class="fas fa-book"></i></div>
+      </div>
+
+      <div class="material-content">
+        <h3 class="material-title">${row.title}</h3>
+        <div class="material-type"><span>${row.file_count} item(s)</span></div>
+        <span class="material-category ${catClass}">${row.category}</span>
+      </div>
+    </div>
+  `;
+            }
+
+
 
             // ── ADD MODAL FILE PREVIEW LOGIC (NOW WITH CLICKABLE PDF PREVIEW) ───────
             const pdfInput = document.getElementById('pdfInput');
@@ -804,4 +913,5 @@ if (!isset($_SESSION['user_id']) || $_SESSION['role'] !== 'admin') {
         });
     </script>
 </body>
+
 </html>

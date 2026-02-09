@@ -1,5 +1,14 @@
 <?php
+session_start();
+
+if (!isset($_SESSION['user_id']) || !isset($_SESSION['role']) || $_SESSION['role'] !== 'user') {
+    header('Location: ../signin.php');
+    exit;
+}
+
 require_once '../partial/db_conn.php';
+
+$page = 'practical-exams';
 
 if (!isset($_GET['exam_id']) || !is_numeric($_GET['exam_id'])) {
     die("Invalid exam.");
@@ -20,43 +29,391 @@ $examId = intval($_GET['exam_id']);
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
 
     <style>
+        /* --- Exam top bar --- */
+        .exam-topbar {
+            position: sticky;
+            top: 0;
+            z-index: 1050;
+            background: #fff;
+            border-bottom: 1px solid #e5e7eb;
+            padding: 12px 16px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+        }
+
+        .exam-back {
+            text-decoration: none;
+            color: #111827;
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .exam-back:hover {
+            color: #0d6efd;
+        }
+
+        .exam-logo {
+            text-decoration: none;
+            color: #111827;
+            font-weight: 700;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .exam-logo img {
+            width: 34px;
+            height: 34px;
+            object-fit: contain;
+        }
+
+        /* --- Navbar (copied-minimal) --- */
+        .navbar {
+            box-shadow: 0 2px 10px rgba(0, 0, 0, .06);
+        }
+
+        .profile-dropdown .profile-trigger {
+            cursor: pointer;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 38px;
+            height: 38px;
+            border-radius: 999px;
+            overflow: hidden;
+        }
+
+        .profile-dropdown .profile-img {
+            width: 38px;
+            height: 38px;
+            object-fit: cover;
+            border-radius: 999px;
+            display: block;
+        }
+
+        .profile-dropdown .profile-initials {
+            width: 38px;
+            height: 38px;
+            border-radius: 999px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 700;
+            background: #e9ecef;
+            color: #111827;
+        }
+
         body {
-            /* background: #020617; */
-            background: #e5e7eb;
-            /* color: #e5e7eb; */
-            color: #020617;
+            padding-top: 0px;
+
+            font-family: 'Segoe UI', sans-serif;
+            background: #f5f7fa;
+            color: #111827;
+            margin: 0;
+            padding: 0;
         }
 
         .exam-wrapper {
-            max-width: 1100px;
-            margin: 20px auto;
-            padding: 15px;
+            max-width: 900px;
+            margin: 40px auto;
+            padding: 20px;
         }
 
         .exam-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            border-bottom: 1px solid #1e293b;
-            padding-bottom: 10px;
-            margin-bottom: 10px;
+            text-align: center;
+            margin-bottom: 30px;
         }
 
-        .exam-body {
-            min-height: 350px;
+        .exam-header h2 {
+            font-size: 2rem;
+            font-weight: 700;
+            color: #14b8a6;
         }
 
-        .choice-btn {
-            width: 100%;
-            text-align: left;
-            margin-bottom: 8px;
+        .exam-header p {
+            color: #4b5563;
+            font-size: 1rem;
+        }
+
+        #questionContainer {
+            background: #ffffff;
+            border-radius: 12px;
+            padding: 25px;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.05);
+            margin-bottom: 20px;
+        }
+
+        .form-check-label {
+            font-size: 1rem;
+            padding-left: 8px;
         }
 
         .exam-footer {
             display: flex;
             justify-content: space-between;
-            border-top: 1px solid #1e293b;
-            padding-top: 10px;
+            align-items: center;
+            margin-bottom: 40px;
+        }
+
+        .exam-footer button {
+            border-radius: 10px;
+            padding: 10px 22px;
+            font-weight: 600;
+            font-size: 0.95rem;
+        }
+
+        #prevBtn {
+            background: #e5e7eb;
+            color: #111827;
+        }
+
+        #nextBtn {
+            background: #14b8a6;
+            color: white;
+        }
+
+        #reviewBtn {
+            background: #3b82f6;
+            /* visible blue for review */
+            color: white;
+        }
+
+
+        #submitBtn {
+            background: #f43f5e;
+            border: none;
+            color: white;
+        }
+
+        .badge {
+            font-size: 0.85rem;
+            padding: 0.35em 0.6em;
+            border-radius: 8px;
+        }
+
+        #timerDisplay {
+            background: #fef3c7;
+            color: #111827;
+            padding: 5px 12px;
+            border-radius: 8px;
+            font-weight: 600;
+        }
+
+        /* Review Modal */
+        #reviewContainer {
+            max-height: 65vh;
+            overflow-y: auto;
+            padding: 10px;
+        }
+
+        .review-answer {
+            background: #f3f4f6;
+            padding: 12px 15px;
+            border-radius: 8px;
+            margin-top: 8px;
+        }
+
+        /* Score Circle */
+        .score-circle {
+            width: 120px;
+            height: 120px;
+            border-radius: 50%;
+            border: 8px solid #e5e7eb;
+            margin: 0 auto 20px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.5rem;
+            font-weight: bold;
+        }
+
+        .score-pass {
+            border-color: #14b8a6;
+            color: #14b8a6;
+        }
+
+        .score-fail {
+            border-color: #f43f5e;
+            color: #f43f5e;
+        }
+
+        .stats-grid {
+            display: flex;
+            justify-content: space-around;
+            margin-bottom: 20px;
+            flex-wrap: wrap;
+        }
+
+        .stat-box {
+            text-align: center;
+            padding: 10px 15px;
+        }
+
+        .stat-value {
+            font-size: 1.3rem;
+            font-weight: 600;
+        }
+
+        .stat-label {
+            font-size: 0.85rem;
+            color: #6b7280;
+        }
+
+        /* Results Modal (enhanced like screenshot) */
+        .results-modal {
+            border: 0;
+            overflow: hidden;
+            border-radius: 18px;
+        }
+
+        .results-header {
+            background: linear-gradient(90deg, #14b8a6, #06b6d4);
+            color: #fff;
+            padding: 18px 20px;
+            text-align: center;
+            font-weight: 700;
+        }
+
+        .results-header h3 {
+            margin: 0;
+            font-size: 1.2rem;
+            font-weight: 800;
+            letter-spacing: 0.2px;
+        }
+
+        .results-body {
+            padding: 18px 16px 8px;
+        }
+
+        .score-circle {
+            width: 120px;
+            height: 120px;
+            border-radius: 999px;
+            border: none;
+            box-shadow: 0 12px 24px rgba(0, 0, 0, 0.12);
+            margin: 6px auto 18px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.7rem;
+            font-weight: 900;
+            color: #fff;
+        }
+
+        .score-circle .score-sub {
+            font-size: 0.85rem;
+            font-weight: 700;
+            margin-top: 2px;
+            opacity: 0.95;
+        }
+
+        .score-pass {
+            background: #14b8a6;
+        }
+
+        .score-fail {
+            background: #ef4444;
+        }
+
+        .stats-grid {
+            gap: 10px;
+            margin: 0 auto 18px;
+        }
+
+        .stat-box {
+            background: #f3f4f6;
+            border-radius: 12px;
+            min-width: 120px;
+            flex: 1 1 120px;
+            padding: 12px 10px;
+        }
+
+        .stat-value {
+            color: #0ea5e9;
+            font-weight: 800;
+        }
+
+        .details-title {
+            text-align: left;
+            font-weight: 800;
+            margin: 12px 0 10px;
+            font-size: 1.05rem;
+        }
+
+        .details-scroll {
+            max-height: 55vh;
+            overflow-y: auto;
+            padding-right: 4px;
+        }
+
+        .q-card {
+            background: #fff;
+            border: 1px solid #e5e7eb;
+            border-radius: 14px;
+            padding: 14px;
+            margin-bottom: 14px;
+            box-shadow: 0 8px 18px rgba(0, 0, 0, 0.04);
+            text-align: left;
+        }
+
+        .q-card .q-number {
+            font-weight: 800;
+            margin-bottom: 6px;
+            color: #111827;
+        }
+
+        .q-card .q-text {
+            color: #374151;
+            margin-bottom: 10px;
+            line-height: 1.35;
+        }
+
+        .answer-pill {
+            border-radius: 10px;
+            padding: 10px 12px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 10px;
+            margin-top: 8px;
+            border-left: 4px solid transparent;
+            font-size: 0.95rem;
+        }
+
+        .answer-pill strong {
+            font-weight: 800;
+        }
+
+        .answer-pill .pill-text {
+            flex: 1;
+        }
+
+        .answer-pill .pill-icon {
+            opacity: 0.9;
+            font-size: 0.95rem;
+        }
+
+        .pill-correct {
+            background: #dcfce7;
+            border-left-color: #16a34a;
+            color: #166534;
+        }
+
+        .pill-wrong {
+            background: #fee2e2;
+            border-left-color: #dc2626;
+            color: #991b1b;
+        }
+
+        .pill-unanswered {
+            background: #fef3c7;
+            border-left-color: #f59e0b;
+            color: #92400e;
         }
     </style>
 
@@ -64,11 +421,20 @@ $examId = intval($_GET['exam_id']);
 
 <body>
 
+    <div class="exam-topbar">
+        <a href="practical-exams.php" class="exam-logo">
+            <img src="../images/logo.png" alt="ChemEase Logo">
+            <span>ChemEase</span>
+        </a>
+    </div>
     <div class="exam-wrapper">
-
+        <div class="d-flex justify-content-start mb-3">
+            <button class="btn btn-outline-danger" onclick="showExitModal()">
+                <i class="fa fa-arrow-left"></i> Go Back
+            </button>
+        </div>
         <div class="exam-header">
             <h4 id="examTitle"></h4>
-
             <div>
                 <span>Question <span id="qCurrent">1</span>/<span id="qTotal">0</span></span>
                 <span class="ms-3 badge bg-danger" id="timerDisplay"></span>
@@ -77,36 +443,143 @@ $examId = intval($_GET['exam_id']);
 
         <div id="questionContainer" class="exam-body"></div>
 
-        <div class="exam-footer">
-            <button class="btn btn-outline-secondary" onclick="showExitModal()">
-                <i class="fa fa-arrow-left"></i> Go Back
-            </button>
-
-            <div class="d-flex gap-2">
-                <button id="prevBtn" class="btn btn-secondary" onclick="prevQuestion()">Previous</button>
+        <div class="exam-footer d-flex justify-content-between align-items-center">
+            <button id="prevBtn" class="btn btn-secondary" onclick="prevQuestion()">Previous</button>
+            <div>
+                <button id="reviewBtn" class="btn btn-info d-none" onclick="showReviewModal()">Review</button>
                 <button id="nextBtn" class="btn btn-primary" onclick="nextQuestion()">Next</button>
-                <button id="submitBtn" class="btn btn-danger d-none" onclick="confirmSubmit()">Submit</button>
             </div>
         </div>
 
+
     </div>
 
+    <!-- Exit Exam Modal -->
+    <div class="modal fade" id="exitExamModal" tabindex="-1" data-bs-backdrop="static" data-bs-keyboard="false">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header primary-blue-header">
+                    <h5 class="modal-title">Leave Exam?</h5>
+                </div>
+                <div class="modal-body text-center">
+                    <i class="fas fa-exclamation-triangle fa-3x text-warning mb-3"></i>
+                    <p>
+                        You are about to leave the exam.<br>
+                        <strong>Your progress will be lost.</strong><br><br>
+                        Are you sure you want to go back?
+                    </p>
+                </div>
+                <div class="modal-footer justify-content-center">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="button" class="btn btn-danger" onclick="exitExam()">Yes, Leave</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Review Modal -->
+    <div class="modal fade" id="reviewModal" tabindex="-1">
+        <div class="modal-dialog modal-xl">
+            <div class="modal-content">
+                <div class="modal-header primary-blue-header">
+                    <h5 class="modal-title">Review Your Answers</h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body" id="reviewContainer" style="max-height:70vh;overflow-y:auto"></div>
+                <div class="modal-footer">
+                    <button class="btn btn-secondary" data-bs-dismiss="modal" onclick="backToExam()">Back to Exam</button>
+                    <button class="btn btn-success" onclick="finalSubmit()">Submit Exam</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Results Modal -->
+    <div class="modal fade" id="resultsModal" tabindex="-1">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content results-modal">
+                <div class="results-header">
+                    <h3 id="resultsTitle">Exam Complete!</h3>
+                </div>
+                <div class="results-body text-center">
+                    <div class="score-circle" id="scoreCircle">
+                        <div id="finalScore">0%</div>
+                    </div>
+                    <div class="stats-grid">
+                        <div class="stat-box">
+                            <div class="stat-value" id="statCorrect">0</div>
+                            <div class="stat-label">Correct</div>
+                        </div>
+                        <div class="stat-box">
+                            <div class="stat-value" id="statIncorrect">0</div>
+                            <div class="stat-label">Incorrect</div>
+                        </div>
+                        <div class="stat-box">
+                            <div class="stat-value" id="statUnanswered">0</div>
+                            <div class="stat-label">Unanswered</div>
+                        </div>
+                        <div class="stat-box">
+                            <div class="stat-value" id="statTime">00:00</div>
+                            <div class="stat-label">Time Taken</div>
+                        </div>
+                    </div>
+                    <div id="detailedResults"></div>
+                </div>
+                <div class="modal-footer justify-content-center">
+                    <button class="btn btn-primary btn-lg" data-bs-dismiss="modal">Close</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- History Modal -->
+    <div class="modal fade" id="historyModal" tabindex="-1">
+        <div class="modal-dialog modal-xl">
+            <div class="modal-content">
+                <div class="modal-header primary-blue-header">
+                    <h5 class="modal-title">Your Exam History</h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body" id="historyBody">
+                    <p class="text-center">Loading your history...</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Time Up Modal -->
+    <div class="modal fade" id="timeUpModal" tabindex="-1" data-bs-backdrop="static" data-bs-keyboard="false">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header primary-blue-header">
+                    <h5 class="modal-title">Time's Up!</h5>
+                </div>
+                <div class="modal-body text-center">
+                    <i class="fas fa-clock fa-3x text-danger mb-3"></i>
+                    <p>Your time has ended. The exam will now be submitted automatically.</p>
+                </div>
+                <div class="modal-footer justify-content-center">
+                    <button class="btn btn-danger" data-bs-dismiss="modal" onclick="finalSubmit()">Submit Now</button>
+                </div>
+            </div>
+        </div>
+    </div>
 
     <script src="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.0/js/bootstrap.bundle.min.js"></script>
-
     <script>
-        // =======================
-        // GLOBAL VARIABLES
-        // =======================
-
         let examData = null;
         let originalQuestions = [];
         let questionMapping = [];
         let currentQ = 0;
-        let responses = [];
+        let responses = {}; // key = question_id, value = choice_id
         let startTime = null;
         let timerInterval = null;
+        let examEnded = false;
+        let isGoingToReview = false;
 
+        // =======================
+        // START EXAM
+        // =======================
         function startExam(examId) {
             fetch(`../partial/exam_start.php?exam_id=${examId}`)
                 .then(r => r.json())
@@ -136,7 +609,7 @@ $examId = intval($_GET['exam_id']);
                         questions: questionMapping.map(qm => qm.shuffledQuestion)
                     };
 
-                    responses = Array(examData.questions.length).fill(null);
+                    responses = {}; // initialize as object keyed by question_id
 
                     document.getElementById('examTitle').textContent = examData.exam.title;
                     document.getElementById('qTotal').textContent = examData.questions.length;
@@ -149,52 +622,51 @@ $examId = intval($_GET['exam_id']);
                 });
         }
 
-
         // =======================
-        // QUESTION DISPLAY
+        // SHOW QUESTION
         // =======================
-
         function showQuestion() {
             const q = examData.questions[currentQ];
+            const container = document.getElementById('questionContainer');
 
             document.getElementById('qCurrent').textContent = currentQ + 1;
 
             let html = `<h5 class="mb-3">${q.text}</h5>`;
 
             q.choices.forEach(choice => {
-                const checked = responses[currentQ] === choice.id ? 'checked' : '';
-
                 html += `
-            <div class="form-check mb-2">
-                <input class="form-check-input"
-                       type="radio"
-                       name="choice"
-                       id="choice_${choice.id}"
-                       value="${choice.id}"
-                       ${checked}
-                       onchange="saveAnswer(${choice.id})">
-
-                <label class="form-check-label" for="choice_${choice.id}">
-                    ${choice.text}
-                </label>
-            </div>
+        <div class="form-check mb-2">
+            <input class="form-check-input"
+                   type="radio"
+                   name="choice_q_${currentQ}"
+                   id="choice_${choice.id}"
+                   value="${choice.id}">
+            <label class="form-check-label" for="choice_${choice.id}">
+                ${choice.text}
+            </label>
+        </div>
         `;
             });
 
-            document.getElementById('questionContainer').innerHTML = html;
+            container.innerHTML = html;
+
+            // preselect if already answered
+            if (responses[q.id] !== undefined) {
+                const selected = container.querySelector(`input[value="${responses[q.id]}"]`);
+                if (selected) selected.checked = true;
+            }
+
+            container.querySelectorAll('input[type="radio"]').forEach(radio => {
+                radio.addEventListener('change', () => {
+                    responses[q.id] = Number(radio.value); // store by question ID
+                    updateButtons();
+                });
+            });
         }
-
-
-        function saveAnswer(choiceId) {
-            responses[currentQ] = choiceId;
-        }
-
-
 
         // =======================
         // NAVIGATION
         // =======================
-
         function nextQuestion() {
             if (currentQ < examData.questions.length - 1) {
                 currentQ++;
@@ -202,7 +674,6 @@ $examId = intval($_GET['exam_id']);
                 updateButtons();
             }
         }
-
 
         function prevQuestion() {
             if (currentQ > 0) {
@@ -213,14 +684,24 @@ $examId = intval($_GET['exam_id']);
         }
 
         function updateButtons() {
+            const q = examData.questions[currentQ];
             const isLast = currentQ === examData.questions.length - 1;
 
-            document.getElementById('nextBtn').classList.toggle('d-none', isLast);
-            document.getElementById('submitBtn').classList.toggle('d-none', !isLast);
-
+            // Previous button
             document.getElementById('prevBtn').disabled = currentQ === 0;
+
+            // Next button
+            document.getElementById('nextBtn').disabled = responses[q.id] === undefined;
+            document.getElementById('nextBtn').classList.toggle('d-none', isLast);
+
+            // Review button
+            document.getElementById('reviewBtn').classList.toggle('d-none', !isLast);
         }
 
+
+        // =======================
+        // EXIT
+        // =======================
         function showExitModal() {
             const modal = new bootstrap.Modal(document.getElementById('exitExamModal'));
             modal.show();
@@ -231,9 +712,49 @@ $examId = intval($_GET['exam_id']);
         }
 
         // =======================
+        // REVIEW MODAL
+        // =======================
+        function showReviewModal() {
+            isGoingToReview = true;
+            let reviewHtml = '';
+
+            examData.questions.forEach((q, i) => {
+                // console.log(q.choices)
+                // console.log(responses)
+                const userAnswerId = responses[q.id]; // lookup by question ID
+                const userAnswer = q.choices.find(c => c.id == userAnswerId);
+                const correctAnswer = q.choices.find(c => c.correct);
+
+                const isCorrect = userAnswerId && userAnswer && userAnswer.correct;
+
+                let cleanUserText = userAnswer ? userAnswer.text.replace(/^[A-D]\.\s*/i, '').trim() : 'Not answered';
+                console.log(userAnswer)
+                let cleanCorrectText = correctAnswer ? correctAnswer.text.replace(/^[A-D]\.\s*/i, '').trim() : '';
+
+                reviewHtml += `<div class="mb-4 p-3 border rounded">
+            <div class="fw-bold mb-2">Question ${i + 1}</div>
+            <div class="mb-2">${q.text}</div>
+            <div class="review-answer">
+                <strong>Your Answer:</strong> ${cleanUserText}
+            </div>
+        </div>`;
+            });
+
+            document.getElementById('reviewContainer').innerHTML = reviewHtml;
+
+            const reviewModal = new bootstrap.Modal(document.getElementById('reviewModal'));
+            reviewModal.show();
+        }
+
+        function backToExam() {
+            isGoingToReview = false;
+            showQuestion();
+            updateButtons();
+        }
+
+        // =======================
         // TIMER
         // =======================
-
         function startTimer(seconds) {
             let remaining = seconds;
 
@@ -246,110 +767,193 @@ $examId = intval($_GET['exam_id']);
 
                 if (remaining <= 0) {
                     clearInterval(timerInterval);
-                    submitExam();
+                    timeUp();
                 }
 
                 remaining--;
             }, 1000);
         }
 
+        function timeUp() {
+            // Do NOT set examEnded here; finalSubmit() will bail out if examEnded is true.
+            const modal = new bootstrap.Modal(document.getElementById('timeUpModal'));
+            modal.show();
+        }
 
         // =======================
         // SUBMISSION
         // =======================
-
         function confirmSubmit() {
-            if (confirm("Submit your exam now?")) submitExam();
+            if (confirm("Submit your exam now?")) finalSubmit();
         }
 
-        function submitExam() {
+        function finalSubmit() {
+            if (examEnded) return;
+            clearInterval(timerInterval);
+            examEnded = true;
+
+            const timeTaken = Math.floor((Date.now() - startTime) / 1000);
+            const minutes = String(Math.floor(timeTaken / 60)).padStart(2, '0');
+            const seconds = String(timeTaken % 60).padStart(2, '0');
+
+            const payload = {
+                attempt_id: examData.attempt_id,
+                responses: examData.questions.map(q => ({
+                    question_id: q.id,
+                    answer_id: responses[q.id] || null
+                }))
+            };
+
             fetch('../partial/exam_submit.php', {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json'
                     },
-                    body: JSON.stringify({
-                        exam_id: examData.exam.id,
-                        attempt_id: examData.attempt_id,
-                        answers: responses,
-                        mapping: questionMapping
-                    })
+                    body: JSON.stringify(payload)
                 })
                 .then(r => r.json())
                 .then(res => {
-                    if (res.success) {
-                        alert("Exam submitted successfully!");
-                        window.location.href = 'practical-exams.php';
-                    } else {
-                        alert(res.message || "Submission failed.");
-                    }
+                    if (res.success) showResults(res, minutes + ':' + seconds);
+                    else alert('Error submitting exam. Please try again.');
                 });
         }
 
+        // =======================
+        // SHOW RESULTS
+        // =======================
+        function showResults(data, timeTaken) {
+            const passed = data.score >= data.passing_score;
+            const statusText = passed ? 'Passed' : 'Failed';
+            const passingItems = Math.ceil((data.passing_score / 100) * data.total);
 
+            // Circle content like screenshot
+            document.getElementById('finalScore').innerHTML = `
+                <div>${data.score}%</div>
+                <div class="score-sub">${statusText}</div>
+            `;
+
+            // Optional passing line under the circle
+            const existingPassingLine = document.getElementById('passingLine');
+            if (existingPassingLine) existingPassingLine.remove();
+
+            const passingLine = document.createElement('div');
+            passingLine.id = 'passingLine';
+            passingLine.style.marginTop = '-6px';
+            passingLine.style.marginBottom = '14px';
+            passingLine.style.fontWeight = '700';
+            passingLine.style.color = '#6b7280';
+            passingLine.style.fontSize = '0.9rem';
+            passingLine.innerHTML = `Passing Score: ${passingItems}/${data.total}`;
+
+            const scoreCircleEl = document.getElementById('scoreCircle');
+            scoreCircleEl.after(passingLine);
+
+            document.getElementById('scoreCircle').className = 'score-circle ' + (passed ? 'score-pass' : 'score-fail');
+            document.getElementById('resultsTitle').textContent = passed ? 'Exam Completed' : 'Exam Completed';
+
+            // Stats
+            document.getElementById('statCorrect').textContent = data.correct;
+            const answered = Object.keys(responses).length;
+            const incorrect = Math.max(0, answered - data.correct);
+
+            document.getElementById('statIncorrect').textContent = incorrect;
+            document.getElementById('statUnanswered').textContent = Math.max(0, data.total - answered);
+            document.getElementById('statTime').textContent = timeTaken;
+
+            // Detailed Results (styled)
+            let detailsHtml = `
+                <div class="details-title">Detailed Results</div>
+                <div class="details-scroll">
+            `;
+
+            examData.questions.forEach((q, i) => {
+                const userAnswerId = responses[q.id];
+                const userAnswer = q.choices.find(c => c.id == userAnswerId);
+                const correctAnswer = q.choices.find(c => c.correct);
+
+                const cleanUserText = userAnswer ? userAnswer.text.replace(/^[A-D]\.\s*/i, '').trim() : 'Not answered';
+                const cleanCorrectText = correctAnswer ? correctAnswer.text.replace(/^[A-D]\.\s*/i, '').trim() : '';
+
+                let userPillClass = 'pill-unanswered';
+                let userIcon = '<i class="fa-solid fa-circle-question pill-icon"></i>';
+
+                if (userAnswerId !== undefined && userAnswer) {
+                    if (userAnswer.correct) {
+                        userPillClass = 'pill-correct';
+                        userIcon = '<i class="fa-solid fa-circle-check pill-icon"></i>';
+                    } else {
+                        userPillClass = 'pill-wrong';
+                        userIcon = '<i class="fa-solid fa-circle-xmark pill-icon"></i>';
+                    }
+                } else {
+                    userPillClass = 'pill-unanswered';
+                    userIcon = '<i class="fa-solid fa-circle-question pill-icon"></i>';
+                }
+
+                detailsHtml += `
+                    <div class="q-card">
+                        <div class="q-number">Question ${i + 1}</div>
+                        <div class="q-text">${q.text}</div>
+
+                        <div class="answer-pill ${userPillClass}">
+                            <div class="pill-text"><strong>Your Answer:</strong> ${cleanUserText}</div>
+                            ${userIcon}
+                        </div>
+
+                        <div class="answer-pill pill-correct">
+                            <div class="pill-text"><strong>Correct Answer:</strong> ${cleanCorrectText}</div>
+                            <i class="fa-solid fa-circle-check pill-icon"></i>
+                        </div>
+                    </div>
+                `;
+            });
+
+            detailsHtml += `</div>`;
+            document.getElementById('detailedResults').innerHTML = detailsHtml;
+
+            showModal('resultsModal');
+        }
 
         // =======================
         // UTILITIES
         // =======================
-
         function shuffleArray(arr) {
             return [...arr].sort(() => Math.random() - 0.5);
         }
 
+        function showModal(modalId) {
+            const modalEl = document.getElementById(modalId);
+            if (!modalEl) return;
+            const modal = new bootstrap.Modal(modalEl);
+            modal.show();
+        }
 
         // =======================
         // AUTO START
         // =======================
-
         document.addEventListener("DOMContentLoaded", () => {
             startExam(<?= $examId ?>);
         });
     </script>
 
-    <!-- <div class="modal fade" id="exitExamModal" tabindex="-1">
-        <div class="modal-dialog modal-dialog-centered">
-            <div class="modal-content">
-                <div class="modal-header">
-                    <h5 class="modal-title text-danger">Leave Exam?</h5>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-                </div>
-                <div class="modal-body">
-                    <p>
-                        You are about to leave the exam.<br>
-                        <strong>Your progress will be lost.</strong><br><br>
-                        Are you sure you want to go back?
-                    </p>
-                </div>
-                <div class="modal-footer">
-                    <button class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-                    <button class="btn btn-danger" onclick="exitExam()">Yes, Leave</button>
-                </div>
-            </div>
-        </div>
-    </div> -->
 
-    <!-- Exit Confirmation Modal -->
-    <div class="modal fade" id="exitExamModal" tabindex="-1" data-bs-backdrop="static" data-bs-keyboard="false">
-        <div class="modal-dialog modal-dialog-centered">
-            <div class="modal-content">
-                <div class="modal-header primary-blue-header">
-                    <h5 class="modal-title">Leave Exam?</h5>
-                </div>
-                <div class="modal-body text-center">
-                    <i class="fas fa-exclamation-triangle fa-3x text-warning mb-3"></i>
-                    <p>
-                        You are about to leave the exam.<br>
-                        <strong>Your progress will be lost.</strong><br><br>
-                        Are you sure you want to go back?
-                    </p>
-                </div>
-                <div class="modal-footer justify-content-center">
-                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-                    <button type="button" class="btn btn-danger" onclick="exitExam()">Yes, Leave</button>
-                </div>
-            </div>
-        </div>
-    </div>
+
+    <script>
+        document.addEventListener("DOMContentLoaded", () => {
+            // Defensive cleanup: remove any stuck modal backdrop that could block clicks
+            document.querySelectorAll(".modal-backdrop").forEach(b => b.remove());
+            document.body.classList.remove("modal-open");
+            document.body.style.removeProperty("padding-right");
+
+            // Redirect back to Practice Exams after closing results
+            const resultsModal = document.getElementById('resultsModal');
+            if (resultsModal) {
+                resultsModal.addEventListener('hidden.bs.modal', () => {
+                    window.location.href = 'practical-exams.php';
+                });
+            }
+        });
+    </script>
 
 </body>
 
