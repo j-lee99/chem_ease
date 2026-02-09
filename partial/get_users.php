@@ -59,6 +59,7 @@ if (isset($_GET['user_id'])) {
     // Select only columns that exist to avoid SQL errors across schema changes
     $desiredUserCols = [
         'id',
+        'u_uid',
         'full_name',
         'email',
         'address',
@@ -279,4 +280,3 @@ echo json_encode([
 ]);
 
 $conn->close();
-?>
