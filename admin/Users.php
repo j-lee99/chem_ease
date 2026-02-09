@@ -603,7 +603,7 @@ if (!isset($_SESSION['user_id']) || $_SESSION['role'] !== 'admin') {
                 infoBody.innerHTML = '';
 
                 const rows = [
-                    ['User ID', user.id],
+                    ['User ID', user.u_uid ?? user.id],
                     ['First Name', user.first_name],
                     ['Last Name', user.last_name],
                     ['Full Name', user.full_name],
@@ -766,7 +766,7 @@ if (!isset($_SESSION['user_id']) || $_SESSION['role'] !== 'admin') {
                             });
                             tbody.innerHTML += `
                             <tr class="user-row" data-id="${user.id}" style="cursor:pointer;">
-                                <td><strong>#${user.id}</strong></td>
+                                <td><strong>${user.id}</strong></td>
                                 <td>
                                     <div class="d-flex align-items-center">
                                         <div class="avatar-wrapper me-3">
