@@ -262,6 +262,159 @@ $examId = intval($_GET['exam_id']);
             font-size: 0.85rem;
             color: #6b7280;
         }
+
+        /* Results Modal (enhanced like screenshot) */
+        .results-modal {
+            border: 0;
+            overflow: hidden;
+            border-radius: 18px;
+        }
+
+        .results-header {
+            background: linear-gradient(90deg, #14b8a6, #06b6d4);
+            color: #fff;
+            padding: 18px 20px;
+            text-align: center;
+            font-weight: 700;
+        }
+
+        .results-header h3 {
+            margin: 0;
+            font-size: 1.2rem;
+            font-weight: 800;
+            letter-spacing: 0.2px;
+        }
+
+        .results-body {
+            padding: 18px 16px 8px;
+        }
+
+        .score-circle {
+            width: 120px;
+            height: 120px;
+            border-radius: 999px;
+            border: none;
+            box-shadow: 0 12px 24px rgba(0, 0, 0, 0.12);
+            margin: 6px auto 18px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.7rem;
+            font-weight: 900;
+            color: #fff;
+        }
+
+        .score-circle .score-sub {
+            font-size: 0.85rem;
+            font-weight: 700;
+            margin-top: 2px;
+            opacity: 0.95;
+        }
+
+        .score-pass {
+            background: #14b8a6;
+        }
+
+        .score-fail {
+            background: #ef4444;
+        }
+
+        .stats-grid {
+            gap: 10px;
+            margin: 0 auto 18px;
+        }
+
+        .stat-box {
+            background: #f3f4f6;
+            border-radius: 12px;
+            min-width: 120px;
+            flex: 1 1 120px;
+            padding: 12px 10px;
+        }
+
+        .stat-value {
+            color: #0ea5e9;
+            font-weight: 800;
+        }
+
+        .details-title {
+            text-align: left;
+            font-weight: 800;
+            margin: 12px 0 10px;
+            font-size: 1.05rem;
+        }
+
+        .details-scroll {
+            max-height: 55vh;
+            overflow-y: auto;
+            padding-right: 4px;
+        }
+
+        .q-card {
+            background: #fff;
+            border: 1px solid #e5e7eb;
+            border-radius: 14px;
+            padding: 14px;
+            margin-bottom: 14px;
+            box-shadow: 0 8px 18px rgba(0, 0, 0, 0.04);
+            text-align: left;
+        }
+
+        .q-card .q-number {
+            font-weight: 800;
+            margin-bottom: 6px;
+            color: #111827;
+        }
+
+        .q-card .q-text {
+            color: #374151;
+            margin-bottom: 10px;
+            line-height: 1.35;
+        }
+
+        .answer-pill {
+            border-radius: 10px;
+            padding: 10px 12px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 10px;
+            margin-top: 8px;
+            border-left: 4px solid transparent;
+            font-size: 0.95rem;
+        }
+
+        .answer-pill strong {
+            font-weight: 800;
+        }
+
+        .answer-pill .pill-text {
+            flex: 1;
+        }
+
+        .answer-pill .pill-icon {
+            opacity: 0.9;
+            font-size: 0.95rem;
+        }
+
+        .pill-correct {
+            background: #dcfce7;
+            border-left-color: #16a34a;
+            color: #166534;
+        }
+
+        .pill-wrong {
+            background: #fee2e2;
+            border-left-color: #dc2626;
+            color: #991b1b;
+        }
+
+        .pill-unanswered {
+            background: #fef3c7;
+            border-left-color: #f59e0b;
+            color: #92400e;
+        }
     </style>
 
 </head>
@@ -673,15 +826,32 @@ $examId = intval($_GET['exam_id']);
             const statusText = passed ? 'Passed' : 'Failed';
             const passingItems = Math.ceil((data.passing_score / 100) * data.total);
 
+            // Circle content like screenshot
             document.getElementById('finalScore').innerHTML = `
-        ${data.score}%<div style="font-size: 1rem; margin-top: 0.5rem; font-weight: 600;">
-        ${statusText} (Passing Score: ${passingItems}/${data.total})
-        </div>
-    `;
+                <div>${data.score}%</div>
+                <div class="score-sub">${statusText}</div>
+            `;
+
+            // Optional passing line under the circle
+            const existingPassingLine = document.getElementById('passingLine');
+            if (existingPassingLine) existingPassingLine.remove();
+
+            const passingLine = document.createElement('div');
+            passingLine.id = 'passingLine';
+            passingLine.style.marginTop = '-6px';
+            passingLine.style.marginBottom = '14px';
+            passingLine.style.fontWeight = '700';
+            passingLine.style.color = '#6b7280';
+            passingLine.style.fontSize = '0.9rem';
+            passingLine.innerHTML = `Passing Score: ${passingItems}/${data.total}`;
+
+            const scoreCircleEl = document.getElementById('scoreCircle');
+            scoreCircleEl.after(passingLine);
 
             document.getElementById('scoreCircle').className = 'score-circle ' + (passed ? 'score-pass' : 'score-fail');
-            document.getElementById('resultsTitle').textContent = passed ? 'Congratulations! You Passed!' : 'Exam Completed';
+            document.getElementById('resultsTitle').textContent = passed ? 'Exam Completed' : 'Exam Completed';
 
+            // Stats
             document.getElementById('statCorrect').textContent = data.correct;
             const answered = Object.keys(responses).length;
             const incorrect = Math.max(0, answered - data.correct);
@@ -690,7 +860,57 @@ $examId = intval($_GET['exam_id']);
             document.getElementById('statUnanswered').textContent = Math.max(0, data.total - answered);
             document.getElementById('statTime').textContent = timeTaken;
 
-            // detailed results handled in Review modal
+            // Detailed Results (styled)
+            let detailsHtml = `
+                <div class="details-title">Detailed Results</div>
+                <div class="details-scroll">
+            `;
+
+            examData.questions.forEach((q, i) => {
+                const userAnswerId = responses[q.id];
+                const userAnswer = q.choices.find(c => c.id == userAnswerId);
+                const correctAnswer = q.choices.find(c => c.correct);
+
+                const cleanUserText = userAnswer ? userAnswer.text.replace(/^[A-D]\.\s*/i, '').trim() : 'Not answered';
+                const cleanCorrectText = correctAnswer ? correctAnswer.text.replace(/^[A-D]\.\s*/i, '').trim() : '';
+
+                let userPillClass = 'pill-unanswered';
+                let userIcon = '<i class="fa-solid fa-circle-question pill-icon"></i>';
+
+                if (userAnswerId !== undefined && userAnswer) {
+                    if (userAnswer.correct) {
+                        userPillClass = 'pill-correct';
+                        userIcon = '<i class="fa-solid fa-circle-check pill-icon"></i>';
+                    } else {
+                        userPillClass = 'pill-wrong';
+                        userIcon = '<i class="fa-solid fa-circle-xmark pill-icon"></i>';
+                    }
+                } else {
+                    userPillClass = 'pill-unanswered';
+                    userIcon = '<i class="fa-solid fa-circle-question pill-icon"></i>';
+                }
+
+                detailsHtml += `
+                    <div class="q-card">
+                        <div class="q-number">Question ${i + 1}</div>
+                        <div class="q-text">${q.text}</div>
+
+                        <div class="answer-pill ${userPillClass}">
+                            <div class="pill-text"><strong>Your Answer:</strong> ${cleanUserText}</div>
+                            ${userIcon}
+                        </div>
+
+                        <div class="answer-pill pill-correct">
+                            <div class="pill-text"><strong>Correct Answer:</strong> ${cleanCorrectText}</div>
+                            <i class="fa-solid fa-circle-check pill-icon"></i>
+                        </div>
+                    </div>
+                `;
+            });
+
+            detailsHtml += `</div>`;
+            document.getElementById('detailedResults').innerHTML = detailsHtml;
+
             showModal('resultsModal');
         }
 
