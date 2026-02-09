@@ -1,3 +1,61 @@
+<?php
+if (session_status() === PHP_SESSION_NONE) {
+    session_start();
+}
+
+if (!isset($_SESSION['user_id']) || !isset($_SESSION['role']) || $_SESSION['role'] !== 'user') {
+    header('Location: ../signin.php');
+    exit;
+}
+
+require_once '../partial/db_conn.php';
+
+$user_id = $_SESSION['user_id'];
+
+// Always fetch fresh data from DB
+$stmt = $conn->prepare("
+    SELECT full_name, profile_image 
+    FROM users 
+    WHERE id = ? AND is_deleted = 0
+");
+$stmt->bind_param("i", $user_id);
+$stmt->execute();
+$user = $stmt->get_result()->fetch_assoc();
+$stmt->close();
+
+if (!$user) {
+    session_destroy();
+    header('Location: ../signin.php');
+    exit;
+}
+
+$full_name     = $user['full_name'];
+$profile_image = $user['profile_image'] ?? '';
+
+// Optional: keep session fresh for other pages
+$_SESSION['full_name']     = $full_name;
+$_SESSION['profile_image'] = $profile_image;
+
+// Initials
+$initials = '';
+if ($full_name) {
+    $name_parts = explode(' ', trim($full_name));
+    foreach ($name_parts as $part) {
+        if (!empty($part)) {
+            $initials .= strtoupper(substr($part, 0, 1));
+        }
+        if (strlen($initials) >= 2) break;
+    }
+}
+if (empty($initials)) $initials = 'U';
+
+// Page marker for navbar highlighting
+$page = 'practical-exams';
+?>
+
+<?php
+$cats = ['Analytical Chemistry', 'Organic Chemistry', 'Physical Chemistry', 'Inorganic Chemistry', 'BioChemistry'];
+?>
 <!DOCTYPE html>
 <html lang="en">
 
@@ -8,6 +66,42 @@
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
+        /* --- Navbar (copied-minimal) --- */
+        .navbar {
+            box-shadow: 0 2px 10px rgba(0, 0, 0, .06);
+        }
+
+        .profile-dropdown .profile-trigger {
+            cursor: pointer;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 38px;
+            height: 38px;
+            border-radius: 999px;
+            overflow: hidden;
+        }
+
+        .profile-dropdown .profile-img {
+            width: 38px;
+            height: 38px;
+            object-fit: cover;
+            border-radius: 999px;
+            display: block;
+        }
+
+        .profile-dropdown .profile-initials {
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(135deg, var(--primary-blue), var(--gradient-end));
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-weight: bold;
+            font-size: 1rem;
+        }
+
         :root {
             --primary-blue: #17a2b8;
             --gradient-end: #20c997;
@@ -21,6 +115,8 @@
         }
 
         body {
+            padding-top: 80px;
+
             overflow-x: hidden;
         }
 
@@ -79,6 +175,9 @@
             justify-content: space-between;
             flex-wrap: wrap;
             gap: 1rem;
+            max-width: 1200px;
+            margin-left: auto;
+            margin-right: auto;
         }
 
         .user-score {
@@ -102,12 +201,12 @@
             transform: translateX(5px);
         }
 
-        /* .exams-grid {
+        .exams-grid {
             display: grid;
             grid-template-columns: repeat(3, 1fr);
             gap: 2rem;
             margin-top: 2rem;
-        } */
+        }
 
         .exam-card {
             background: rgba(255, 255, 255, .98);
@@ -213,6 +312,53 @@
             max-height: 2000px;
             opacity: 1;
             margin-top: 1rem;
+        }
+
+        .topic-tabs {
+            display: flex;
+            gap: 0.6rem;
+            margin-bottom: 2.5rem;
+            flex-wrap: wrap;
+            justify-content: center;
+            background: rgba(255, 255, 255, 0.92);
+            padding: 1rem;
+            border-radius: 20px;
+            box-shadow: 0 8px 32px rgba(23, 162, 184, 0.15);
+            backdrop-filter: blur(10px);
+            max-width: 1200px;
+            margin-left: auto;
+            margin-right: auto;
+        }
+
+        .topic-tab {
+            background: transparent;
+            border: none;
+            padding: 0.9rem 1.8rem;
+            border-radius: 16px;
+            font-weight: 600;
+            color: #2c3e50;
+            cursor: pointer;
+            transition: all .4s ease;
+            font-size: 1rem;
+            white-space: nowrap;
+            min-width: 140px;
+            min-height: 44px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .topic-tab:hover {
+            background: rgba(23, 162, 184, 0.15);
+            transform: translateY(-4px);
+            box-shadow: 0 6px 20px rgba(23, 162, 184, 0.2);
+        }
+
+        .topic-tab.active {
+            background: linear-gradient(135deg, var(--primary-blue), var(--gradient-end));
+            color: white;
+            box-shadow: 0 10px 30px rgba(23, 162, 184, 0.45);
+            transform: translateY(-3px);
         }
 
         .difficulty-badge {
@@ -571,6 +717,20 @@
             }
         }
 
+        /* Tablets */
+        @media (max-width: 992px) {
+            #examsGrid {
+                grid-template-columns: repeat(2, 1fr);
+            }
+        }
+
+        /* Mobile */
+        @media (max-width: 576px) {
+            #examsGrid {
+                grid-template-columns: 1fr;
+            }
+        }
+
         @media (max-width: 1200px) {
             .exams-grid {
                 grid-template-columns: repeat(2, 1fr);
@@ -802,6 +962,108 @@
 </head>
 
 <body>
+    <nav class="navbar navbar-expand-lg navbar-light bg-white fixed-top">
+        <div class="container-fluid px-3 px-md-4">
+            <a class="navbar-brand d-flex align-items-center" href="index.php">
+                <img src="../images/logo.png" alt="ChemEase Logo" width="35" height="35" class="me-2">
+                ChemEase
+            </a>
+            <!-- Hamburger + Profile Icon (visible together only on mobile) -->
+            <div class="d-flex align-items-center d-lg-none">
+                <!-- Profile icon shown in top bar on mobile -->
+                <div class="dropdown profile-dropdown me-3 d-block d-lg-none">
+                    <div class="profile-trigger" id="profileDropdownMobile" data-bs-toggle="dropdown" aria-expanded="false" role="button">
+                        <?php if ($profile_image && file_exists('../' . $profile_image)): ?>
+                            <img src="../<?php echo htmlspecialchars($profile_image); ?>?t=<?php echo time(); ?>" alt="Profile" class="profile-img">
+                        <?php else: ?>
+                            <div class="profile-initials"><?php echo htmlspecialchars($initials); ?></div>
+                        <?php endif; ?>
+                    </div>
+                    <ul class="dropdown-menu dropdown-menu-end" aria-labelledby="profileDropdownMobile">
+                        <li><a class="dropdown-item" href="index.php?page=profile"><i class="fas fa-user me-2"></i> Profile</a></li>
+                        <li><a class="dropdown-item logout-trigger" href="#" data-bs-toggle="modal" data-bs-target="#logoutModal"><i class="fas fa-sign-out-alt me-2"></i> Logout</a></li>
+                    </ul>
+                </div>
+                <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav" aria-controls="navbarNav" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div class="collapse navbar-collapse" id="navbarNav">
+                <ul class="navbar-nav me-auto mb-2 mb-lg-0">
+                    <li class="nav-item">
+                        <a class="nav-link <?php echo $page === 'dashboard' ? 'active' : ''; ?>" href="index.php?page=dashboard">
+                            <i class="fas fa-tachometer-alt"></i> Dashboard
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link <?php echo $page === 'study-materials' ? 'active' : ''; ?>" href="index.php?page=study-materials">
+                            <i class="fas fa-book"></i> Study Materials
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link <?php echo $page === 'practical-exams' ? 'active' : ''; ?>" href="practical-exams.php">
+                            <i class="fas fa-flask"></i> Practice Exams
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link <?php echo $page === 'analytics' ? 'active' : ''; ?>" href="index.php?page=analytics">
+                            <i class="fas fa-chart-bar"></i> Analytics
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link <?php echo $page === 'forums' ? 'active' : ''; ?>" href="index.php?page=forums">
+                            <i class="fas fa-users"></i> Forums
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link <?php echo $page === 'calculator' ? 'active' : ''; ?>" href="index.php?page=calculator">
+                            <i class="fas fa-calculator"></i> Calculator
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link <?php echo $page === 'periodic-table' ? 'active' : ''; ?>" href="index.php?page=periodic-table">
+                            <i class="fas fa-table"></i> Periodic Table
+                        </a>
+                    </li>
+                </ul>
+                <!-- Original profile dropdown (visible only on desktop/tablet when expanded) -->
+                <div class="dropdown profile-dropdown d-none d-lg-flex">
+                    <div class="profile-trigger" id="profileDropdown" data-bs-toggle="dropdown" aria-expanded="false" role="button">
+                        <?php if ($profile_image && file_exists('../' . $profile_image)): ?>
+                            <img src="../<?php echo htmlspecialchars($profile_image); ?>?t=<?php echo time(); ?>" alt="Profile" class="profile-img">
+                        <?php else: ?>
+                            <div class="profile-initials"><?php echo htmlspecialchars($initials); ?></div>
+                        <?php endif; ?>
+                    </div>
+                    <ul class="dropdown-menu dropdown-menu-end" aria-labelledby="profileDropdown">
+                        <li><a class="dropdown-item" href="index.php?page=profile"><i class="fas fa-user me-2"></i> Profile</a></li>
+                        <li><a class="dropdown-item logout-trigger" href="#" data-bs-toggle="modal" data-bs-target="#logoutModal"><i class="fas fa-sign-out-alt me-2"></i> Logout</a></li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Logout Confirmation Modal -->
+    <div class="modal fade" id="logoutModal" tabindex="-1" aria-labelledby="logoutModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="logoutModalLabel">Confirm Logout</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    Are you sure you want to log out of ChemEase?
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <a href="https://chemease.site/" class="btn btn-danger">Yes, Logout</a>
+                </div>
+            </div>
+        </div>
+    </div>
+
+
     <div class="practice-exams-container">
         <div class="page-header">
             <h1 class="page-title">Practice Exams</h1>
@@ -816,6 +1078,15 @@
             <a href="#" class="view-history" data-bs-toggle="modal" data-bs-target="#historyModal">
                 View Exam History <i class="fas fa-arrow-right"></i>
             </a>
+        </div>
+        <div class="topic-tabs">
+            <?php foreach ($cats as $i => $cat):
+                $slug = strtolower(str_replace(' ', '-', $cat));
+            ?>
+                <button class="topic-tab <?= $i === 0 ? 'active' : '' ?>" data-topic="<?= $slug ?>">
+                    <?= htmlspecialchars($cat) ?>
+                </button>
+            <?php endforeach; ?>
         </div>
 
         <div class="exams-grid" id="examsGrid"></div>
@@ -1129,6 +1400,19 @@
         // </div>`;
         //         });
         // }
+        const CATEGORIES = [
+            'Analytical Chemistry',
+            'Organic Chemistry',
+            'Physical Chemistry',
+            'Inorganic Chemistry',
+            'BioChemistry'
+        ];
+
+        function slugify(text) {
+            return text.toLowerCase().replace(/\s+/g, '-');
+        }
+
+        let ALL_EXAMS = [];
 
         function loadExams() {
             fetch('../partial/exam_list.php')
@@ -1136,177 +1420,117 @@
                 .then(({
                     data
                 }) => {
-                    const grid = document.getElementById('examsGrid');
-                    grid.innerHTML = '';
+                    ALL_EXAMS = Array.isArray(data) ? data : [];
 
-                    if (!Array.isArray(data) || !data.length) {
-                        grid.innerHTML = `
-                <div class="text-center col-12">
-                    <h4>No exams available yet.</h4>
-                </div>`;
-                        return;
-                    }
-
-                    let totalScore = 0;
-                    let totalAttempts = 0;
-
-                    // 🔹 Group exams by category
-                    const categories = {};
-                    for (const e of data) {
-                        const category = e.category || 'Uncategorized';
-                        if (!categories[category]) {
-                            categories[category] = [];
-                        }
-                        categories[category].push(e);
-                    }
-
-                    // 🔹 Render accordion categories
-                    for (const [categoryName, exams] of Object.entries(categories)) {
-
-                        // ===== CATEGORY HEADER =====
-                        const header = document.createElement('div');
-                        header.className = 'exam-category-header collapsed';
-                        header.innerHTML = `
-                <span class="toggle-icon">▶</span>
-                <span class="category-title">${categoryName}</span>
-            `;
-
-                        // ===== CATEGORY GRID =====
-                        const categoryGrid = document.createElement('div');
-                        categoryGrid.className = 'exam-grid collapse';
-
-                        // 🔥 Accordion logic
-                        header.addEventListener('click', () => {
-                            const isOpen = categoryGrid.classList.contains('expand');
-
-                            // Close all
-                            document.querySelectorAll('.exam-grid').forEach(g => {
-                                g.classList.remove('expand');
-                                g.classList.add('collapse');
-                            });
-
-                            document.querySelectorAll('.exam-category-header').forEach(h => {
-                                h.querySelector('.toggle-icon').textContent = '▶';
-                            });
-
-                            // Open current if it was closed
-                            if (!isOpen) {
-                                categoryGrid.classList.remove('collapse');
-                                categoryGrid.classList.add('expand');
-                                header.querySelector('.toggle-icon').textContent = '▼';
-                            }
-                        });
-
-                        const fragment = document.createDocumentFragment();
-
-                        // ===== YOUR EXISTING CARD CODE (UNCHANGED) =====
-                        for (const e of exams) {
-                            const difficulty = (e.difficulty || 'Beginner');
-                            const badge =
-                                difficulty === 'Beginner' ? 'success' :
-                                difficulty === 'Intermediate' ? 'warning' :
-                                'danger';
-
-                            if (e.user_score !== null && e.user_score !== undefined) {
-                                totalScore += Number(e.user_score) || 0;
-                                totalAttempts++;
-                            }
-
-                            let shortDesc = e.description || 'No description available.';
-                            if (shortDesc.length > 120) {
-                                shortDesc = shortDesc.slice(0, 117) + '...';
-                            }
-
-                            const safeTitle = escapeAttr(e.title);
-                            const safeDesc = escapeAttr(e.description || '');
-                            const safeTopic = escapeAttr(e.topic || 'Not specified');
-                            const totalItems = e.total_questions || e.actual_questions;
-                            const passingItems = e.passing_score ?
-                                Math.ceil((e.passing_score / 100) * totalItems) :
-                                null;
-
-
-                            const div = document.createElement('div');
-                            div.className = 'exam-card';
-                            div.style.cursor = 'pointer';
-
-                            div.onclick = () => openDetailsModal(
-                                e.id,
-                                safeTitle,
-                                safeDesc,
-                                difficulty,
-                                totalItems,
-                                e.duration_minutes,
-                                passingItems,
-                                safeTopic,
-                                e.user_score ?? null
-                            );
-
-                            div.innerHTML = `
-                    <div class="exam-card-content">
-                        <div class="exam-header">
-                            <h3 class="exam-title">${e.title}</h3>
-                            <span class="difficulty-badge ${badge}">${difficulty}</span>
-                        </div>
-                        <p class="exam-description">${shortDesc}</p>
-                        <div class="exam-stats">
-                            <div class="stat-item">
-                                <i class="fas fa-question-circle stat-icon"></i>
-                                <span>${e.total_questions || e.actual_questions} Questions</span>
-                            </div>
-                            <div class="stat-item">
-                                <i class="fas fa-clock stat-icon"></i>
-                                <span>${e.duration_minutes} Minutes</span>
-                            </div>
-                        </div>
-                    </div>
-                    <div class="exam-footer">
-                        <div class="start-btn">
-                            ${e.user_score ? 'Retake' : 'Take'} Exam <i class="fas fa-play"></i>
-                        </div>
-                        ${
-                            e.user_score !== null && e.user_score !== undefined
-                                ? `<small class="d-block text-center text-success mt-2">
-                                        Your best: ${e.user_score}/${totalItems}
-                                   </small>`
-                                : ''
-                        }
-                    </div>
-                `;
-
-                            div.querySelector('.start-btn').onclick = ev => {
-                                ev.stopPropagation();
-                                openDetailsModal(
-                                    e.id,
-                                    safeTitle,
-                                    safeDesc,
-                                    difficulty,
-                                    totalItems,
-                                    e.duration_minutes,
-                                    passingItems,
-                                    safeTopic,
-                                    e.user_score ?? null
-                                );
-                            };
-
-                            fragment.appendChild(div);
-                        }
-
-                        categoryGrid.appendChild(fragment);
-                        grid.appendChild(header);
-                        grid.appendChild(categoryGrid);
-                    }
-
-                    // 🔹 Auto-open first category
-                    grid.querySelector('.exam-category-header')?.click();
-
-                    document.getElementById('avgScore').textContent =
-                        totalAttempts ? Math.round(totalScore / totalAttempts) + '%' : '—';
+                    // auto-load first category
+                    renderExamsByCategory(CATEGORIES[0]);
                 })
-                .catch(err => {
-                    console.error('Failed to load exams:', err);
-                });
+                .catch(err => console.error('Failed to load exams:', err));
         }
+
+        function renderExamsByCategory(category) {
+            const grid = document.getElementById('examsGrid');
+            grid.innerHTML = '';
+
+            const exams = ALL_EXAMS.filter(e => e.category === category);
+
+            if (!exams.length) {
+                grid.innerHTML = `
+            <div class="text-center col-12">
+                <h4>No exams available for this category.</h4>
+            </div>`;
+                return;
+            }
+
+            let totalScore = 0;
+            let totalAttempts = 0;
+            const fragment = document.createDocumentFragment();
+
+            for (const e of exams) {
+                const difficulty = (e.difficulty || 'Beginner');
+                const badge =
+                    difficulty === 'Beginner' ? 'success' :
+                    difficulty === 'Intermediate' ? 'warning' :
+                    'danger';
+
+                if (e.user_score !== null && e.user_score !== undefined) {
+                    totalScore += Number(e.user_score) || 0;
+                    totalAttempts++;
+                }
+
+                let shortDesc = e.description || 'No description available.';
+                if (shortDesc.length > 120) shortDesc = shortDesc.slice(0, 117) + '...';
+
+                const safeTitle = escapeAttr(e.title);
+                const safeDesc = escapeAttr(e.description || '');
+                const safeTopic = escapeAttr(e.topic || 'Not specified');
+                const totalItems = e.total_questions || e.actual_questions;
+                const passingItems = e.passing_score ?
+                    Math.ceil((e.passing_score / 100) * totalItems) :
+                    null;
+
+                const div = document.createElement('div');
+                div.className = 'exam-card';
+                div.style.cursor = 'pointer';
+
+                div.onclick = () => openDetailsModal(
+                    e.id,
+                    safeTitle,
+                    safeDesc,
+                    difficulty,
+                    totalItems,
+                    e.duration_minutes,
+                    passingItems,
+                    safeTopic,
+                    e.user_score ?? null
+                );
+
+                div.innerHTML = `
+            <div class="exam-card-content">
+                <div class="exam-header">
+                    <h3 class="exam-title">${e.title}</h3>
+                    <span class="difficulty-badge ${badge}">${difficulty}</span>
+                </div>
+                <p class="exam-description">${shortDesc}</p>
+                <div class="exam-stats">
+                    <div class="stat-item">
+                        <i class="fas fa-question-circle stat-icon"></i>
+                        <span>${totalItems} Questions</span>
+                    </div>
+                    <div class="stat-item">
+                        <i class="fas fa-clock stat-icon"></i>
+                        <span>${e.duration_minutes} Minutes</span>
+                    </div>
+                </div>
+            </div>
+            <div class="exam-footer">
+                <div class="start-btn">
+                    ${e.user_score ? 'Retake' : 'Take'} Exam <i class="fas fa-play"></i>
+                </div>
+                ${
+                    e.user_score !== null && e.user_score !== undefined
+                        ? `<small class="d-block text-center text-success mt-2">
+                            Your best: ${e.user_score}/${totalItems}
+                          </small>`
+                        : ''
+                }
+            </div>
+        `;
+
+                div.querySelector('.start-btn').onclick = ev => {
+                    ev.stopPropagation();
+                    div.onclick();
+                };
+
+                fragment.appendChild(div);
+            }
+
+            grid.appendChild(fragment);
+
+            document.getElementById('avgScore').textContent =
+                totalAttempts ? Math.round(totalScore / totalAttempts) + '%' : '—';
+        }
+
 
         /* ---------- Helpers ---------- */
 
@@ -1329,11 +1553,7 @@
             document.getElementById('detailsDuration').textContent = duration;
             document.getElementById('detailsPassingScore').textContent = `${passingScore}/${questions}`;
 
-            console.log(duration)
-            console.log(bestScore)
-
             if (bestScore !== null && bestScore !== 'null' && bestScore !== 'undefined') {
-                console.log(bestScore)
                 document.getElementById('detailsBestScore').textContent = `${bestScore}/${questions}`;
                 document.getElementById('bestScoreRow').style.display = 'block';
                 document.getElementById('startFromDetailsText').textContent = 'Retake Exam';
@@ -1663,8 +1883,34 @@
                 });
         });
 
+        document.querySelectorAll('.topic-tab').forEach(tab => {
+            tab.addEventListener('click', () => {
+                document.querySelectorAll('.topic-tab')
+                    .forEach(t => t.classList.remove('active'));
+
+                tab.classList.add('active');
+
+                const slug = tab.dataset.topic;
+                const category = CATEGORIES.find(c => slugify(c) === slug);
+
+                if (category) {
+                    renderExamsByCategory(category);
+                }
+            });
+        });
+
         window.addEventListener('DOMContentLoaded', loadExams);
     </script>
+
+    <script>
+        document.addEventListener("DOMContentLoaded", () => {
+            // Defensive cleanup: remove any stuck modal backdrop that could block clicks (e.g., profile icon)
+            document.querySelectorAll(".modal-backdrop").forEach(b => b.remove());
+            document.body.classList.remove("modal-open");
+            document.body.style.removeProperty("padding-right");
+        });
+    </script>
+
 </body>
 
 </html>
