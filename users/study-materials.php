@@ -691,7 +691,6 @@ $cats = ['Analytical Chemistry', 'Organic Chemistry', 'Physical Chemistry', 'Ino
             }
         }
 
-        /* Existing media queries for main content remain mostly unchanged */
         @media (max-width: 1200px) {
 
             .materials-grid,

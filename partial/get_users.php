@@ -109,7 +109,7 @@ if (isset($_GET['user_id'])) {
         $correctCol = pick_first_existing(['total_correct', 'correct', 'correct_count'], $aCols);
         $answeredCol = pick_first_existing(['total_answered', 'answered', 'answered_count', 'total_questions_answered'], $aCols);
         $examIdCol = pick_first_existing(['exam_id', 'quiz_id', 'test_id'], $aCols);
-        $timeCol = pick_first_existing(['created_at', 'attempted_at', 'submitted_at', 'updated_at'], $aCols);
+        $timeCol = pick_first_existing(['created_at', 'attempted_at', 'submitted_at', 'updated_at', 'started_at'], $aCols);
 
         $attemptSelect = [];
         if ($examIdCol) $attemptSelect[] = "`$examIdCol` AS exam_id";
@@ -233,11 +233,12 @@ $params = [];
 $types = '';
 
 if ($search) {
-    $where .= " AND (full_name LIKE ? OR email LIKE ?)";
+    $where .= " AND (u_uid LIKE ? OR full_name LIKE ? OR email LIKE ?)";
     $searchTerm = "%$search%";
     $params[] = $searchTerm;
     $params[] = $searchTerm;
-    $types .= 'ss';
+    $params[] = $searchTerm;
+    $types .= 'sss';
 }
 
 // Count total
@@ -251,7 +252,7 @@ $total = $countStmt->get_result()->fetch_row()[0] ?? 0;
 $countStmt->close();
 
 // Fetch users
-$sql = "SELECT id, full_name, email, created_at, profile_image
+$sql = "SELECT id, u_uid, full_name, email, created_at, profile_image
         FROM users
         $where
         ORDER BY id DESC

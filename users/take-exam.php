@@ -708,7 +708,7 @@ $examId = intval($_GET['exam_id']);
         }
 
         function exitExam() {
-            window.location.href = 'practical-exams.php';
+            window.location.href = 'index.php?page=practical-exams';
         }
 
         // =======================
@@ -949,7 +949,7 @@ $examId = intval($_GET['exam_id']);
             const resultsModal = document.getElementById('resultsModal');
             if (resultsModal) {
                 resultsModal.addEventListener('hidden.bs.modal', () => {
-                    window.location.href = 'practical-exams.php';
+                    window.location.href = 'index.php?page=practical-exams';
                 });
             }
         });

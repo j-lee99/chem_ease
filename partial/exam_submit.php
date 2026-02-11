@@ -28,7 +28,7 @@ try {
         $stmt->bind_param('iiii', $attemptId, $qid, $aid, $correct);
         $stmt->execute();
     }
- 
+
     $examInfo = $conn->query("
         SELECT e.total_questions, e.passing_score 
         FROM exams e 
@@ -38,7 +38,7 @@ try {
 
     $totalQ = $examInfo['total_questions'];
     $passingScore = $examInfo['passing_score'];
-    $score = $totalQ ? round(($totalCorrect / $totalQ) * 100) : 0;
+    $score = $totalCorrect;
 
     $conn->query("UPDATE user_exam_attempts 
                   SET finished_at = NOW(), 
@@ -57,9 +57,7 @@ try {
         'total' => $totalQ,
         'passing_score' => $passingScore
     ]);
-
 } catch (Exception $e) {
     $conn->rollback();
     echo json_encode(['success' => false, 'msg' => 'Server error']);
 }
-?>
