@@ -766,7 +766,7 @@ if (!isset($_SESSION['user_id']) || $_SESSION['role'] !== 'admin') {
                             });
                             tbody.innerHTML += `
                             <tr class="user-row" data-id="${user.id}" style="cursor:pointer;">
-                                <td><strong>${user.id}</strong></td>
+                                <td><strong>${user.u_uid ? user.u_uid : user.id}</strong></td>
                                 <td>
                                     <div class="d-flex align-items-center">
                                         <div class="avatar-wrapper me-3">
