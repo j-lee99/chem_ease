@@ -949,6 +949,77 @@ $cats = ['Analytical Chemistry', 'Organic Chemistry', 'Physical Chemistry', 'Ino
             let currentModalInstance = null;
             let currentModalElement = null;
 
+            const MATERIAL_LOCK_WINDOW_MS = 30 * 60 * 1000; // 30 minutes
+            let activeMaterialId = null;
+            const materialLastActivity = new Map();
+
+            function getMaterialLastActivity(mid) {
+                const key = String(mid);
+                const mem = materialLastActivity.get(key);
+                if (mem) return mem;
+                try {
+                    const ls = localStorage.getItem('material_last_activity_' + key);
+                    const n = Number(ls);
+                    if (!Number.isNaN(n) && n > 0) return n;
+                } catch (e) {}
+                return 0;
+            }
+
+            function setMaterialLastActivity(mid, ts = Date.now()) {
+                const key = String(mid);
+                materialLastActivity.set(key, ts);
+                try {
+                    localStorage.setItem('material_last_activity_' + key, String(ts));
+                } catch (e) {}
+            }
+
+            function getMaterialAverageProgress(mid) {
+                const cont = document.getElementById('prog-' + mid);
+                if (!cont) return 0;
+
+                const items = cont.querySelectorAll('.progress-item .progress-percentage');
+                if (!items.length) return 0;
+
+                let sum = 0;
+                let count = 0;
+                items.forEach(el => {
+                    const v = parseFloat(String(el.textContent || '').replace('%', '').trim());
+                    if (!Number.isNaN(v)) {
+                        sum += v;
+                        count++;
+                    }
+                });
+                return count ? (sum / count) : 0;
+            }
+
+            function isSwitchBlocked(targetMid) {
+                if (!activeMaterialId) return false;
+                const fromMid = String(activeMaterialId);
+                const toMid = String(targetMid);
+
+                if (!toMid || fromMid === toMid) return false;
+
+                const avg = getMaterialAverageProgress(fromMid);
+                if (avg >= 100) return false;
+
+                const last = getMaterialLastActivity(fromMid);
+                if (!last) return true;
+
+                return (Date.now() - last) < MATERIAL_LOCK_WINDOW_MS;
+            }
+
+            function showSwitchBlockedMessage() {
+
+                alert(
+                    `You can't switch materials yet.\n\n` +
+                    // `Current material: ${displayTitle || "Unknown"}\n` +
+                    `Finish it (100%) or wait 30 minute(s) since your last progress update.`
+                );
+
+                // alert("You can't switch to a different material yet. Finish the current material (100%), or wait 30 minutes since your last progress update.");
+            }
+
+
             const tabs = document.querySelectorAll('.topic-tab');
             const sections = document.querySelectorAll('.topic-section');
 
@@ -989,11 +1060,15 @@ $cats = ['Analytical Chemistry', 'Organic Chemistry', 'Physical Chemistry', 'Ino
             }
 
             function markAsCompleted(fileId) {
-                saveProgress(fileId, 100);
+                // Kept for backward compatibility
+                saveProgressSmart(fileId, 100, {
+                    force: true
+                });
                 updateProgressBar(fileId, 100);
             }
 
             function destroyModal() {
+                runAndClearCleanups();
                 if (currentModalInstance) {
                     try {
                         currentModalInstance.hide();
@@ -1019,9 +1094,6 @@ $cats = ['Analytical Chemistry', 'Organic Chemistry', 'Physical Chemistry', 'Ino
                     const fid = btn.dataset.fid;
                     destroyModal();
                     openSingleFile(fid);
-                    if (btn.closest('.material-item')?.dataset.fileType === 'youtube') {
-                        markAsCompleted(fid);
-                    }
                 });
             });
 
@@ -1029,6 +1101,13 @@ $cats = ['Analytical Chemistry', 'Organic Chemistry', 'Physical Chemistry', 'Ino
                 btn.addEventListener('click', async e => {
                     e.stopPropagation();
                     const mid = btn.dataset.id;
+                    if (isSwitchBlocked(mid)) {
+                        showSwitchBlockedMessage();
+                        return;
+                    }
+
+                    activeMaterialId = String(mid);
+                    setMaterialLastActivity(activeMaterialId, Date.now());
                     destroyModal();
 
                     try {
@@ -1125,14 +1204,24 @@ $cats = ['Analytical Chemistry', 'Organic Chemistry', 'Physical Chemistry', 'Ino
             window.openFile = function(fid) {
                 destroyModal();
                 openSingleFile(fid);
-                fetch(`../partial/get_one_file.php?fid=${fid}`)
-                    .then(r => r.json())
-                    .then(d => {
-                        if (d?.type === 'youtube') markAsCompleted(fid);
-                    });
             };
 
-            function openSingleFile(fid) {
+            async function openSingleFile(fid) {
+                try {
+                    const mr = await fetch(`../partial/get_material_from_file.php?fid=${fid}`);
+                    const mj = await mr.json();
+                    const targetMid = mj?.material_id ? String(mj.material_id) : null;
+                    if (targetMid) {
+                        if (isSwitchBlocked(targetMid)) {
+                            showSwitchBlockedMessage();
+                            return;
+                        }
+                        activeMaterialId = targetMid;
+                        // If user jumps into a file, start/refresh the lock window
+                        setMaterialLastActivity(activeMaterialId, Date.now());
+                    }
+                } catch (e) {}
+
                 fetch(`../partial/get_one_file.php?fid=${fid}`)
                     .then(r => r.json())
                     .then(d => {
@@ -1147,14 +1236,10 @@ $cats = ['Analytical Chemistry', 'Organic Chemistry', 'Physical Chemistry', 'Ino
 
                         if (d.type === 'pdf') {
                             body.innerHTML = `<iframe src="../${d.path}" style="width:100%;height:100%;border:none;"></iframe>`;
-                            setupPdfCompletionTracking(body.querySelector('iframe'), fid);
+                            setupPdfTimeTracking(fid, `../${d.path}`);
                         } else if (d.type === 'youtube') {
-                            const embed = getYouTubeEmbed(d.path);
-                            body.innerHTML = `
-                        <div class="ratio ratio-16x9 h-100">
-                            <iframe src="${embed}" allowfullscreen allow="autoplay; encrypted-media; picture-in-picture" style="border:none;"></iframe>
-                        </div>`;
-                            markAsCompleted(fid);
+                            body.innerHTML = renderYouTubePlayerHtml(fid, d.path);
+                            setupYouTubeProgressTracking(fid, d.path);
                         }
 
                         currentModalInstance = new bootstrap.Modal(modal, {
@@ -1169,41 +1254,58 @@ $cats = ['Analytical Chemistry', 'Organic Chemistry', 'Physical Chemistry', 'Ino
                     .catch(() => alert('Error loading content'));
             }
 
-            function setupPdfCompletionTracking(iframe, fileId) {
-                let completed = false;
+            function setupPdfTimeTracking(fileId, url) {
+                const MIN_SECONDS = 120; 
+                const MAX_SECONDS = 2400; 
+                const SECONDS_PER_MB = 300; 
 
-                const checkProgress = () => {
+                async function getPdfSizeBytes(u) {
                     try {
-                        const doc = iframe.contentDocument || iframe.contentWindow?.document;
-                        if (!doc) return;
-
-                        const scrollTop = doc.documentElement.scrollTop || doc.body.scrollTop || 0;
-                        const scrollHeight = doc.documentElement.scrollHeight || doc.body.scrollHeight || 1;
-                        const clientHeight = doc.documentElement.clientHeight || doc.body.clientHeight || 1;
-
-                        const percent = Math.floor((scrollTop + clientHeight) / scrollHeight * 100);
-
-                        if (percent >= 92 && !completed) {
-                            completed = true;
-                            saveProgress(fileId, 100);
-                            updateProgressBar(fileId, 100);
+                        const head = await fetch(u, {
+                            method: 'HEAD',
+                            cache: 'no-store'
+                        });
+                        if (head && head.ok) {
+                            const len = head.headers.get('content-length');
+                            if (len && !isNaN(Number(len))) return Number(len);
                         }
-                    } catch (e) {
-                        setTimeout(() => {
-                            if (!completed) {
-                                completed = true;
-                                saveProgress(fileId, 100);
-                                updateProgressBar(fileId, 100);
-                            }
-                        }, 10000);
-                    }
-                };
+                    } catch (e) {}
 
-                iframe.addEventListener('load', () => {
-                    setInterval(checkProgress, 1800);
-                    checkProgress();
+                    try {
+                        const rangeRes = await fetch(u, {
+                            method: 'GET',
+                            headers: {
+                                'Range': 'bytes=0-0'
+                            },
+                            cache: 'no-store'
+                        });
+                        if (rangeRes && (rangeRes.status === 206 || rangeRes.ok)) {
+                            const cr = rangeRes.headers.get('content-range');
+                            if (cr) {
+                                const total = cr.split('/')[1];
+                                if (total && !isNaN(Number(total))) return Number(total);
+                            }
+                            const len = rangeRes.headers.get('content-length');
+                            if (len && !isNaN(Number(len))) return Number(len);
+                        }
+                    } catch (e) {}
+
+                    return null;
+                }
+
+                function estimateSeconds(bytes) {
+                    if (!bytes || bytes <= 0) return 600;
+                    const mb = bytes / (1024 * 1024);
+                    const est = Math.ceil(mb * SECONDS_PER_MB);
+                    return Math.max(MIN_SECONDS, Math.min(MAX_SECONDS, est));
+                }
+
+                getPdfSizeBytes(url).then((bytes) => {
+                    const secondsToComplete = estimateSeconds(bytes);
+                    startTimeBasedTracking(fileId, secondsToComplete);
                 });
             }
+
 
             function createModal(title = "Viewer", extraClass = "") {
                 const modal = document.createElement('div');
@@ -1229,6 +1331,7 @@ $cats = ['Analytical Chemistry', 'Organic Chemistry', 'Physical Chemistry', 'Ino
             }
 
             function saveProgress(fid, pct) {
+                if (activeMaterialId) setMaterialLastActivity(activeMaterialId, Date.now());
                 fetch('../partial/save_progress.php', {
                     method: 'POST',
                     headers: {
@@ -1236,6 +1339,244 @@ $cats = ['Analytical Chemistry', 'Organic Chemistry', 'Physical Chemistry', 'Ino
                     },
                     body: `file_id=${fid}&progress=${pct}`
                 }).catch(() => {});
+            }
+
+            // =============================
+            // Dynamic progress tracking utils
+            // =============================
+
+            const __progressState = {
+                lastSavedPct: new Map(), 
+                lastSentAt: new Map(), 
+                lastUiPct: new Map(), 
+                cleanups: [], 
+            };
+
+            function registerCleanup(fn) {
+                if (typeof fn === 'function') __progressState.cleanups.push(fn);
+            }
+
+            function runAndClearCleanups() {
+                try {
+                    __progressState.cleanups.forEach(fn => {
+                        try {
+                            fn();
+                        } catch (e) {}
+                    });
+                } finally {
+                    __progressState.cleanups = [];
+                }
+            }
+
+            function clampPct(pct) {
+                pct = Number(pct);
+                if (!Number.isFinite(pct)) return 0;
+                return Math.max(0, Math.min(100, pct));
+            }
+
+            function saveProgressSmart(fileId, pct, opts = {}) {
+                const {
+                    force = false
+                } = opts;
+                pct = Math.round(clampPct(pct));
+
+                const prev = __progressState.lastSavedPct.get(String(fileId)) ?? 0;
+                if (pct < prev) pct = prev; 
+
+                const now = Date.now();
+                const lastAt = __progressState.lastSentAt.get(String(fileId)) ?? 0;
+
+                // throttle: at most 1 request per 3 seconds (unless forced)
+                if (!force && now - lastAt < 3000) return;
+
+                // only save if it moved forward by at least 2% (unless forced or completed)
+                if (!force && pct !== 100 && (pct - prev) < 2) return;
+
+                __progressState.lastSavedPct.set(String(fileId), pct);
+                __progressState.lastSentAt.set(String(fileId), now);
+
+                saveProgress(fileId, pct);
+            }
+
+            function updateProgressUiSmart(fileId, pct) {
+                pct = Math.round(clampPct(pct));
+                const prevUi = __progressState.lastUiPct.get(String(fileId)) ?? 0;
+                if (pct < prevUi) pct = prevUi; // no decrease in UI
+                if (pct === prevUi) return;
+
+                __progressState.lastUiPct.set(String(fileId), pct);
+                updateProgressBar(fileId, pct);
+            }
+
+            function startTimeBasedTracking(fileId, secondsToComplete = 600) {
+                let seconds = 0;
+
+                const intervalId = setInterval(() => {
+                    seconds += 5;
+
+                    const pct = (seconds / Math.max(1, secondsToComplete)) * 100;
+                    updateProgressUiSmart(fileId, pct);
+                    saveProgressSmart(fileId, pct);
+                }, 5000);
+
+                const warmup = setTimeout(() => {
+                    updateProgressUiSmart(fileId, 1);
+                    saveProgressSmart(fileId, 1, {
+                        force: true
+                    });
+                }, 1500);
+
+                registerCleanup(() => {
+                    clearInterval(intervalId);
+                    clearTimeout(warmup);
+                    // this save on close
+                    const pct = (seconds / Math.max(1, secondsToComplete)) * 100;
+                    saveProgressSmart(fileId, pct, {
+                        force: true
+                    });
+                });
+            }
+
+            // -----------------------------
+            // YouTube tracking (IFrame API)
+            // -----------------------------
+
+            let __ytApiPromise = null;
+
+            function ensureYouTubeApi() {
+                if (window.YT && window.YT.Player) return Promise.resolve();
+
+                if (__ytApiPromise) return __ytApiPromise;
+
+                __ytApiPromise = new Promise((resolve) => {
+                    if (!document.querySelector('script[src*="youtube.com/iframe_api"]')) {
+                        const tag = document.createElement('script');
+                        tag.src = 'https://www.youtube.com/iframe_api';
+                        document.head.appendChild(tag);
+                    }
+
+                    const prev = window.onYouTubeIframeAPIReady;
+                    window.onYouTubeIframeAPIReady = function() {
+                        try {
+                            if (typeof prev === 'function') prev();
+                        } catch (e) {}
+                        resolve();
+                    };
+
+                    // will fallback: poll
+                    const poll = setInterval(() => {
+                        if (window.YT && window.YT.Player) {
+                            clearInterval(poll);
+                            resolve();
+                        }
+                    }, 200);
+                    setTimeout(() => clearInterval(poll), 8000);
+                });
+
+                return __ytApiPromise;
+            }
+
+            function extractYouTubeId(url) {
+                if (!url) return null;
+                const match = String(url).match(/(?:youtu\.be\/|youtube\.com(?:\/embed\/|\/v\/|\/watch\?v=|\/watch\?.+&v=))([^"&?\/\s]{11})/i);
+                return match ? match[1] : null;
+            }
+
+            function renderYouTubePlayerHtml(fileId, url) {
+                const vid = extractYouTubeId(url);
+                const iframeId = `yt-player-${fileId}-${Date.now()}`;
+                const origin = encodeURIComponent(window.location.origin);
+                const src = vid ?
+                    `https://www.youtube.com/embed/${vid}?enablejsapi=1&origin=${origin}&rel=0&modestbranding=1` :
+                    getYouTubeEmbed(url);
+
+                return `
+                    <div class="ratio ratio-16x9 h-100">
+                        <iframe
+                            id="${iframeId}"
+                            data-yt-file-id="${fileId}"
+                            data-yt-video-id="${vid || ''}"
+                            src="${src}"
+                            allowfullscreen
+                            allow="autoplay; encrypted-media; picture-in-picture"
+                            style="border:none;"></iframe>
+                    </div>
+                `;
+            }
+
+            function setupYouTubeProgressTracking(fileId, url) {
+                const vid = extractYouTubeId(url);
+                // If can't extract id, we can't use API reliably, fallback to marking 100 after some watch time.
+                if (!vid) {
+                    startTimeBasedTracking(fileId, 420); 
+                    return;
+                }
+
+                ensureYouTubeApi().then(() => {
+                    const iframe = document.querySelector(`iframe[data-yt-file-id="${fileId}"]`);
+                    if (!iframe) return;
+
+                    let player = null;
+                    let tick = null;
+
+                    try {
+                        player = new YT.Player(iframe.id, {
+                            events: {
+                                onReady: () => {
+                                    // Poll current time/duration
+                                    tick = setInterval(() => {
+                                        try {
+                                            const dur = player.getDuration?.() || 0;
+                                            const cur = player.getCurrentTime?.() || 0;
+                                            if (!dur) return;
+
+                                            const pct = (cur / dur) * 100;
+                                            updateProgressUiSmart(fileId, pct);
+                                            saveProgressSmart(fileId, pct);
+                                        } catch (e) {}
+                                    }, 1000);
+                                },
+                                onStateChange: (e) => {
+                                    try {
+                                        const dur = player.getDuration?.() || 0;
+                                        const cur = player.getCurrentTime?.() || 0;
+                                        if (dur) {
+                                            const pct = (cur / dur) * 100;
+                                            updateProgressUiSmart(fileId, pct);
+                                            saveProgressSmart(fileId, pct, {
+                                                force: true
+                                            });
+                                        }
+                                        if (e.data === YT.PlayerState.ENDED) {
+                                            updateProgressUiSmart(fileId, 100);
+                                            saveProgressSmart(fileId, 100, {
+                                                force: true
+                                            });
+                                        }
+                                    } catch (err) {}
+                                }
+                            }
+                        });
+                    } catch (e) {
+                        // Fallback: time-based
+                        startTimeBasedTracking(fileId, 420);
+                        return;
+                    }
+
+                    registerCleanup(() => {
+                        if (tick) clearInterval(tick);
+                        try {
+                            const dur = player?.getDuration?.() || 0;
+                            const cur = player?.getCurrentTime?.() || 0;
+                            if (dur) saveProgressSmart(fileId, (cur / dur) * 100, {
+                                force: true
+                            });
+                        } catch (e) {}
+                        try {
+                            player?.destroy?.();
+                        } catch (e) {}
+                    });
+                });
             }
 
             function updateProgressBar(fid, pct) {
@@ -1288,7 +1629,6 @@ $cats = ['Analytical Chemistry', 'Organic Chemistry', 'Physical Chemistry', 'Ino
 
                     const materialMap = new Map();
 
-                    // Build fast lookup map: material_id -> files[]
                     data.forEach(mat => {
                         materialMap.set(String(mat.id), mat.files);
                     });
