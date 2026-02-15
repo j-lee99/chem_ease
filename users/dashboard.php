@@ -1,8 +1,56 @@
 <?php
-if (!isset($_SESSION['user_id']) || $_SESSION['role'] !== 'user') {
+if (session_status() === PHP_SESSION_NONE) {
+    session_start();
+}
+
+if (!isset($_SESSION['user_id']) || !isset($_SESSION['role']) || $_SESSION['role'] !== 'user') {
     header('Location: ../signin.php');
     exit;
 }
+
+require_once '../partial/db_conn.php';
+
+$user_id = $_SESSION['user_id'];
+
+// Always fetch fresh data from DB
+$stmt = $conn->prepare("
+    SELECT full_name, profile_image 
+    FROM users 
+    WHERE id = ? AND is_deleted = 0
+");
+$stmt->bind_param("i", $user_id);
+$stmt->execute();
+$user = $stmt->get_result()->fetch_assoc();
+$stmt->close();
+
+if (!$user) {
+    session_destroy();
+    header('Location: ../signin.php');
+    exit;
+}
+
+$full_name     = $user['full_name'];
+$profile_image = $user['profile_image'] ?? '';
+
+// Optional: keep session fresh for other pages
+$_SESSION['full_name']     = $full_name;
+$_SESSION['profile_image'] = $profile_image;
+
+// Initials
+$initials = '';
+if ($full_name) {
+    $name_parts = explode(' ', trim($full_name));
+    foreach ($name_parts as $part) {
+        if (!empty($part)) {
+            $initials .= strtoupper(substr($part, 0, 1));
+        }
+        if (strlen($initials) >= 2) break;
+    }
+}
+if (empty($initials)) $initials = 'U';
+
+// Page marker for navbar highlighting
+$page = 'dashboard';
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -387,55 +435,90 @@ if (!isset($_SESSION['user_id']) || $_SESSION['role'] !== 'user') {
 </head>
 
 <body>
-    <!-- Welcome Section -->
-    <div class="welcome-section">
-        <h1 class="mb-2">Welcome back, <?php echo htmlspecialchars($_SESSION['full_name'] ?? 'Student'); ?>!</h1>
-        <p class="mb-0 opacity-75">Track your progress and continue your chemistry learning journey.</p>
-    </div>
+    <!-- Welcome + Leaderboard Row -->
+    <div class="row g-4 align-items-stretch">
+        <div class="col-lg-8">
+            <!-- Welcome Section -->
+            <div class="welcome-section">
+                <h1 class="mb-2">Welcome back, <?php echo htmlspecialchars($_SESSION['full_name'] ?? 'Student'); ?>!</h1>
+                <p class="mb-0 opacity-75">Track your progress and continue your chemistry learning journey.</p>
+            </div>
 
-    <!-- Progress Overview -->
-    <div class="card progress-card">
-        <div class="card-body">
-            <h4 class="card-title mb-4">Your Progress Overview</h4>
+            <!-- Progress Overview -->
+            <div class="card progress-card">
+                <div class="card-body">
+                    <h4 class="card-title mb-4">Your Progress Overview</h4>
 
-            <div class="row mb-4" id="statsContainer">
-                <div class="col-md-3 col-6">
-                    <div class="stat-card">
-                        <i class="fas fa-trophy text-warning mb-2" style="font-size: 1.5rem;"></i>
-                        <div class="stat-number text-warning" id="overallCompletion">--</div>
-                        <div class="stat-label">Overall Completion</div>
+                    <div class="row mb-4" id="statsContainer">
+                        <div class="col-md-3 col-6">
+                            <div class="stat-card">
+                                <i class="fas fa-trophy text-warning mb-2" style="font-size: 1.5rem;"></i>
+                                <div class="stat-number text-warning" id="overallCompletion">--</div>
+                                <div class="stat-label">Overall Completion</div>
+                            </div>
+                        </div>
+                        <div class="col-md-3 col-6">
+                            <div class="stat-card">
+                                <i class="fas fa-fire text-danger mb-2" style="font-size: 1.5rem;"></i>
+                                <div class="stat-number text-danger" id="studyStreak">--</div>
+                                <div class="stat-label">Study Streak</div>
+                            </div>
+                        </div>
+                        <div class="col-md-3 col-6">
+                            <div class="stat-card">
+                                <i class="fas fa-clock text-info mb-2" style="font-size: 1.5rem;"></i>
+                                <div class="stat-number text-info" id="daysActive">--</div>
+                                <div class="stat-label">Days Active</div>
+                            </div>
+                        </div>
+                        <div class="col-md-3 col-6">
+                            <div class="stat-card">
+                                <i class="fas fa-check-circle text-success mb-2" style="font-size: 1.5rem;"></i>
+                                <div class="stat-number text-success" id="topicsCompleted">--</div>
+                                <div class="stat-label">Topics Completed</div>
+                            </div>
+                        </div>
                     </div>
-                </div>
-                <div class="col-md-3 col-6">
-                    <div class="stat-card">
-                        <i class="fas fa-fire text-danger mb-2" style="font-size: 1.5rem;"></i>
-                        <div class="stat-number text-danger" id="studyStreak">--</div>
-                        <div class="stat-label">Study Streak</div>
-                    </div>
-                </div>
-                <div class="col-md-3 col-6">
-                    <div class="stat-card">
-                        <i class="fas fa-clock text-info mb-2" style="font-size: 1.5rem;"></i>
-                        <div class="stat-number text-info" id="daysActive">--</div>
-                        <div class="stat-label">Days Active</div>
-                    </div>
-                </div>
-                <div class="col-md-3 col-6">
-                    <div class="stat-card">
-                        <i class="fas fa-check-circle text-success mb-2" style="font-size: 1.5rem;"></i>
-                        <div class="stat-number text-success" id="topicsCompleted">--</div>
-                        <div class="stat-label">Topics Completed</div>
+
+                    <h6 class="mb-3">Progress by Category</h6>
+                    <div id="progressContainer">
+                        <div class="skeleton" style="height: 60px; margin-bottom: 1rem;"></div>
+                        <div class="skeleton" style="height: 60px; margin-bottom: 1rem;"></div>
                     </div>
                 </div>
             </div>
 
-            <h6 class="mb-3">Progress by Category</h6>
-            <div id="progressContainer">
-                <div class="skeleton" style="height: 60px; margin-bottom: 1rem;"></div>
-                <div class="skeleton" style="height: 60px; margin-bottom: 1rem;"></div>
+
+        </div>
+        <div class="col-lg-4">
+            <div class="h-100">
+                <!-- Leaderboard (Top Reviewees + Full Table Modal) -->
+                <div class="card progress-card p-0" style="border:none; box-shadow:none; background: transparent;">
+                    <div class="lb-card">
+                        <div class="lb-header">
+                            <h5 class="lb-title">Top Reviewees</h5>
+                        </div>
+
+                        <div class="lb-top" id="lbTop3">
+                            <div class="skeleton" style="height: 58px; margin-bottom: 0.6rem;"></div>
+                            <div class="skeleton" style="height: 58px; margin-bottom: 0.6rem;"></div>
+                            <div class="skeleton" style="height: 58px; margin-bottom: 0.6rem;"></div>
+                        </div>
+
+                        <div class="lb-footer">
+                            <div class="lb-rank-text" id="lbMyRankText">Your Rank: --</div>
+                            <button type="button" class="lb-btn" data-bs-toggle="modal" data-bs-target="#leaderboardModal">
+                                View Full Leaderboard
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+
             </div>
         </div>
     </div>
+
 
     <div class="row">
         <!-- Recent Activities -->
@@ -463,28 +546,6 @@ if (!isset($_SESSION['user_id']) || $_SESSION['role'] !== 'user') {
                         <div class="skeleton" style="height: 70px; margin-bottom: 1rem;"></div>
                     </div>
                 </div>
-            </div>
-        </div>
-    </div>
-
-    <!-- Leaderboard (Top Reviewees + Full Table Modal) -->
-    <div class="card progress-card p-0" style="border:none; box-shadow:none; background: transparent;">
-        <div class="lb-card">
-            <div class="lb-header">
-                <h5 class="lb-title">Top Reviewees</h5>
-            </div>
-
-            <div class="lb-top" id="lbTop3">
-                <div class="skeleton" style="height: 58px; margin-bottom: 0.6rem;"></div>
-                <div class="skeleton" style="height: 58px; margin-bottom: 0.6rem;"></div>
-                <div class="skeleton" style="height: 58px; margin-bottom: 0.6rem;"></div>
-            </div>
-
-            <div class="lb-footer">
-                <div class="lb-rank-text" id="lbMyRankText">Your Rank: --</div>
-                <button type="button" class="lb-btn" data-bs-toggle="modal" data-bs-target="#leaderboardModal">
-                    View Full Leaderboard
-                </button>
             </div>
         </div>
     </div>

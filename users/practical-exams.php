@@ -1413,10 +1413,10 @@ $cats = ['Analytical Chemistry', 'Organic Chemistry', 'Physical Chemistry', 'Ino
             document.getElementById('detailsDifficulty').textContent = difficulty;
             document.getElementById('detailsQuestions').textContent = questions;
             document.getElementById('detailsDuration').textContent = duration;
-            document.getElementById('detailsPassingScore').textContent = `${passingScore}/${questions}`;
+            document.getElementById('detailsPassingScore').textContent = `${passingScore}%`;
 
             if (bestScore !== null && bestScore !== 'null' && bestScore !== 'undefined') {
-                document.getElementById('detailsBestScore').textContent = `${bestScore}/${questions}`;
+                document.getElementById('detailsBestScore').textContent = `${bestScore}%`;
                 document.getElementById('bestScoreRow').style.display = 'block';
                 document.getElementById('startFromDetailsText').textContent = 'Retake Exam';
             } else {
