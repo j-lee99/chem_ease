@@ -2,6 +2,21 @@
 // partial/exam_submit.php
 require_once 'db_conn.php';
 session_start();
+
+function column_exists(mysqli $conn, string $table, string $column): bool
+{
+    $tableEsc = $conn->real_escape_string($table);
+    $colEsc = $conn->real_escape_string($column);
+    $sql = "SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS 
+            WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = '{$tableEsc}' AND COLUMN_NAME = '{$colEsc}'
+            LIMIT 1";
+    $res = $conn->query($sql);
+    if (!$res) return false;
+    $exists = $res->num_rows > 0;
+    $res->free();
+    return $exists;
+}
+
 $userId = $_SESSION['user_id'];
 $data = json_decode(file_get_contents('php://input'), true);
 $attemptId = (int)($data['attempt_id'] ?? 0);
@@ -36,26 +51,62 @@ try {
         WHERE a.id = $attemptId
     ")->fetch_assoc();
 
-    $totalQ = $examInfo['total_questions'];
-    $passingScore = $examInfo['passing_score'];
-    $score = $totalCorrect;
+    $totalQ = (int)($examInfo['total_questions'] ?? 0);
+    $passingScore = (float)($examInfo['passing_score'] ?? 0);
+    $score = (int)$totalCorrect;
 
-    $conn->query("UPDATE user_exam_attempts 
-                  SET finished_at = NOW(), 
-                      score = $score, 
-                      total_correct = $totalCorrect, 
-                      total_answered = $totalAnswered 
-                  WHERE id = $attemptId");
+    // -----------------------------
+    // Linear Transmutation (Base-60)
+    // 0% -> 60, 100% -> 100
+    // grade = 60 + 40 * (score / total_items)
+    // -----------------------------
+    $rawPercent = $totalQ > 0 ? ($score / $totalQ) * 100 : 0;
+    $transmutedGrade = $totalQ > 0 ? 60 + (40 * ($score / $totalQ)) : 60;
+
+    if ($transmutedGrade < 60) $transmutedGrade = 60;
+    if ($transmutedGrade > 100) $transmutedGrade = 100;
+    $transmutedGrade = round($transmutedGrade, 2);
+    $rawPercent = round($rawPercent, 2);
+
+    $setParts = [
+        "finished_at = NOW()",
+        "score = ?",
+        "total_correct = ?",
+        "total_answered = ?"
+    ];
+    $types = "iii";
+    $values = [$score, $totalCorrect, $totalAnswered];
+
+    if (column_exists($conn, 'user_exam_attempts', 'raw_percent')) {
+        $setParts[] = "raw_percent = ?";
+        $types .= "d";
+        $values[] = $rawPercent;
+    }
+    if (column_exists($conn, 'user_exam_attempts', 'transmuted_grade')) {
+        $setParts[] = "transmuted_grade = ?";
+        $types .= "d";
+        $values[] = $transmutedGrade;
+    }
+
+    $sql = "UPDATE user_exam_attempts SET " . implode(", ", $setParts) . " WHERE id = ?";
+    $types .= "i";
+    $values[] = $attemptId;
+
+    $stmtUp = $conn->prepare($sql);
+    $stmtUp->bind_param($types, ...$values);
+    $stmtUp->execute();
 
     $conn->commit();
 
-    // This is the key: now we send passing_score
     echo json_encode([
         'success' => true,
         'score' => $score,
         'correct' => $totalCorrect,
         'total' => $totalQ,
-        'passing_score' => $passingScore
+        'passing_score' => $passingScore,
+        'raw_percent' => $rawPercent,
+        'grade' => $transmutedGrade,
+        'passed' => ($passingScore > 0 ? ($transmutedGrade >= $passingScore) : null)
     ]);
 } catch (Exception $e) {
     $conn->rollback();
