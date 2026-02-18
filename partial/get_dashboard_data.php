@@ -1,5 +1,4 @@
 <?php
-// get_dashboard_data.php
 session_start();
 header('Content-Type: application/json');
 
@@ -37,7 +36,6 @@ function buildPointsExpression(mysqli $conn): string
         }
     }
 
-    // Fallback: compute from activity (best-effort)
     return "(
         (SELECT COALESCE(SUM(CASE WHEN up.progress >= 100 THEN 10 ELSE ROUND(up.progress / 10) END), 0)
          FROM user_progress up
@@ -62,7 +60,7 @@ if (($_GET['mode'] ?? '') === 'leaderboard') {
     $where = "WHERE u.role = 'user'";
     if ($search !== '') {
         $searchEsc = $conn->real_escape_string($search);
-        $where .= " AND (u.full_name LIKE '%{$searchEsc}%' OR u.username LIKE '%{$searchEsc}%')";
+        $where .= " AND (u.full_name LIKE '%{$searchEsc}%')";
     }
 
     // Total
@@ -77,7 +75,7 @@ if (($_GET['mode'] ?? '') === 'leaderboard') {
     // Page rows
     $users = [];
     $sql = "
-        SELECT u.id, u.full_name, {$pointsExpr} AS points
+        SELECT u.id, u.full_name, profile_image, {$pointsExpr} AS points
         FROM users u
         {$where}
         ORDER BY points DESC, u.id ASC
@@ -90,15 +88,15 @@ if (($_GET['mode'] ?? '') === 'leaderboard') {
                 'id' => (int)$r['id'],
                 'full_name' => $r['full_name'],
                 'points' => (int)round($r['points'] ?? 0),
+                'profile_pic' => $r['profile_image'] ?? '',
             ];
         }
         $res->free();
     }
 
-    // Top 3 (global, not affected by search)
     $top3 = [];
     $topRes = $conn->query("
-        SELECT u.id, u.full_name, {$pointsExpr} AS points
+        SELECT u.id, u.full_name, u.profile_image, {$pointsExpr} AS points
         FROM users u
         WHERE u.role = 'user'
         ORDER BY points DESC, u.id ASC
@@ -110,12 +108,12 @@ if (($_GET['mode'] ?? '') === 'leaderboard') {
                 'id' => (int)$r['id'],
                 'full_name' => $r['full_name'],
                 'points' => (int)round($r['points'] ?? 0),
+                'profile_pic' => $r['profile_image'] ?? '',
             ];
         }
         $topRes->free();
     }
 
-    // Used this for My rank (global)
     $myRank = null;
     $myPoints = 0;
     $myRes = $conn->query("SELECT {$pointsExpr} AS points FROM users u WHERE u.id = {$user_id} LIMIT 1");
@@ -257,7 +255,6 @@ if ($progress_result) {
 
 $activities = [];
 
-// Study Activities
 $study_res = mysqli_query($conn, "
     SELECT 
         sm.title, 

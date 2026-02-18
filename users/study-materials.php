@@ -944,36 +944,130 @@ $cats = ['Analytical Chemistry', 'Organic Chemistry', 'Physical Chemistry', 'Ino
         </div>
     </div>
 
+
+    <!-- Prerequisite Modal: block next module if previous post-test not passed -->
+    <div class="modal fade" id="prereqModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Module locked</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body" id="prereqModalMessage"></div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">OK</button>
+                    <button type="button" class="btn btn-primary" id="goBackToPrevBtn">Go back</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <script>
         document.addEventListener('DOMContentLoaded', () => {
             let currentModalInstance = null;
             let currentModalElement = null;
 
-            const MATERIAL_LOCK_WINDOW_MS = 30 * 60 * 1000; // 30 minutes
-            let activeMaterialId = null;
-            const materialLastActivity = new Map();
+            // one-time bypass flags (used for the "Go back" button)
+            let bypassPrereqOnce = false;
+            // -----------------------------
+            // Post-test prerequisite gating
+            // -----------------------------
+            const POSTTEST_STATUS = new Map(); // key: "Category::ModuleCode" => { passed: bool, bestPct, passingPct }
 
-            function getMaterialLastActivity(mid) {
-                const key = String(mid);
-                const mem = materialLastActivity.get(key);
-                if (mem) return mem;
-                try {
-                    const ls = localStorage.getItem('material_last_activity_' + key);
-                    const n = Number(ls);
-                    if (!Number.isNaN(n) && n > 0) return n;
-                } catch (e) {}
-                return 0;
+            function parseModuleCodeFromMaterialTitle(title) {
+                const m = String(title || '').match(/^\s*Module\s+([A-Za-z0-9IVXLCDM]+)\s*\./i);
+                return m ? m[1].trim() : null;
             }
 
-            function setMaterialLastActivity(mid, ts = Date.now()) {
-                const key = String(mid);
-                materialLastActivity.set(key, ts);
+            function parseModuleCodeFromPostTestTitle(title) {
+                const m = String(title || '').match(/POST\s*TEST\s*\(\s*Module\s+([A-Za-z0-9IVXLCDM]+)\s*\)/i);
+                return m ? m[1].trim() : null;
+            }
+
+            function toPercent(score, total) {
+                const s = Number(score);
+                const t = Number(total);
+                if (!isFinite(s) || !isFinite(t) || t <= 0) return null;
+                return Math.round((s / t) * 100);
+            }
+
+            async function loadPostTestStatus() {
                 try {
-                    localStorage.setItem('material_last_activity_' + key, String(ts));
-                } catch (e) {}
+                    const r = await fetch('../partial/exam_list.php', {
+                        cache: 'no-store'
+                    });
+                    const j = await r.json();
+                    const exams = Array.isArray(j.data) ? j.data : [];
+
+                    for (const e of exams) {
+                        const moduleCode = parseModuleCodeFromPostTestTitle(e.title);
+                        if (!moduleCode) continue;
+
+                        const totalItems = Number(e.total_questions || e.actual_questions || 0);
+                        const bestPct = (e.user_score !== null && e.user_score !== undefined) ?
+                            toPercent(e.user_score, totalItems) :
+                            null;
+                        const passingPct = (e.passing_score !== null && e.passing_score !== undefined) ?
+                            Math.round(Number(e.passing_score)) :
+                            null;
+
+                        const passed = (bestPct !== null && passingPct !== null && bestPct >= passingPct);
+                        POSTTEST_STATUS.set(`${e.category}::${moduleCode}`, {
+                            passed,
+                            bestPct,
+                            passingPct
+                        });
+                    }
+                } catch (err) {
+                    console.error('Failed to load post-test status:', err);
+                }
+            }
+
+            let prereqPrevMaterialId = null;
+
+            function getLockedMessage(reason) {
+                // Default message requested
+                const def = "Locked content: You failed to pass the exam, haven't taken the exam yet, or haven't finished the previous module.";
+                if (reason === 'not_finished') return "Locked content: You haven't finished the previous module yet. Complete it (100%) before proceeding.";
+                if (reason === 'not_taken') return "Locked content: You haven't taken the previous module's post test yet. Take and pass it to unlock the next module.";
+                if (reason === 'failed') return "Locked content: You failed to pass the exam. Please review the previous module/lesson and try again.";
+                return def;
+            }
+
+            function showPrereqModal(prevMaterialId, reason = null) {
+                prereqPrevMaterialId = prevMaterialId || null;
+                const el = document.getElementById('prereqModalMessage');
+                if (el) el.textContent = getLockedMessage(reason);
+
+                // Hide Go back button if we don't know where to go
+                const backBtn = document.getElementById('goBackToPrevBtn');
+                if (backBtn) backBtn.style.display = prereqPrevMaterialId ? '' : 'none';
+
+                const m = new bootstrap.Modal(document.getElementById('prereqModal'));
+                m.show();
+            }
+
+            // Make "Go back" functional: open the previous module card
+            const goBackBtn = document.getElementById('goBackToPrevBtn');
+            if (goBackBtn) {
+                goBackBtn.addEventListener('click', () => {
+                    const mid = prereqPrevMaterialId;
+                    const modalEl = document.getElementById('prereqModal');
+                    const inst = modalEl ? bootstrap.Modal.getInstance(modalEl) : null;
+                    inst?.hide();
+
+                    if (!mid) return;
+                    const btn = document.querySelector(`.start-learning-btn[data-id="${mid}"]`);
+                    if (!btn) return;
+
+                    // Allow opening the previous module even if we're currently locked
+                    bypassPrereqOnce = true;
+                    btn.click();
+                });
             }
 
             function getMaterialAverageProgress(mid) {
+
                 const cont = document.getElementById('prog-' + mid);
                 if (!cont) return 0;
 
@@ -991,34 +1085,6 @@ $cats = ['Analytical Chemistry', 'Organic Chemistry', 'Physical Chemistry', 'Ino
                 });
                 return count ? (sum / count) : 0;
             }
-
-            function isSwitchBlocked(targetMid) {
-                if (!activeMaterialId) return false;
-                const fromMid = String(activeMaterialId);
-                const toMid = String(targetMid);
-
-                if (!toMid || fromMid === toMid) return false;
-
-                const avg = getMaterialAverageProgress(fromMid);
-                if (avg >= 100) return false;
-
-                const last = getMaterialLastActivity(fromMid);
-                if (!last) return true;
-
-                return (Date.now() - last) < MATERIAL_LOCK_WINDOW_MS;
-            }
-
-            function showSwitchBlockedMessage() {
-
-                alert(
-                    `You can't switch materials yet.\n\n` +
-                    // `Current material: ${displayTitle || "Unknown"}\n` +
-                    `Finish it (100%) or wait 30 minute(s) since your last progress update.`
-                );
-
-                // alert("You can't switch to a different material yet. Finish the current material (100%), or wait 30 minutes since your last progress update.");
-            }
-
 
             const tabs = document.querySelectorAll('.topic-tab');
             const sections = document.querySelectorAll('.topic-section');
@@ -1101,13 +1167,54 @@ $cats = ['Analytical Chemistry', 'Organic Chemistry', 'Physical Chemistry', 'Ino
                 btn.addEventListener('click', async e => {
                     e.stopPropagation();
                     const mid = btn.dataset.id;
-                    if (isSwitchBlocked(mid)) {
-                        showSwitchBlockedMessage();
-                        return;
-                    }
 
-                    activeMaterialId = String(mid);
-                    setMaterialLastActivity(activeMaterialId, Date.now());
+                    // Prerequisite: if this is not the first module in the category,
+                    // require previous module to be finished (100%) and its POST TEST passed.
+                    if (!bypassPrereqOnce) {
+                        try {
+                            const card = btn.closest('.material-card');
+                            const section = btn.closest('.topic-section');
+                            const category = section?.dataset?.topic || null;
+
+                            if (category && card && section) {
+                                const cards = Array.from(section.querySelectorAll('.material-card'));
+                                const idx = cards.indexOf(card);
+
+                                if (idx > 0) {
+                                    const prevCard = cards[idx - 1];
+                                    const prevMid = prevCard?.dataset?.id || null;
+                                    const prevTitle = prevCard?.querySelector('.card-title')?.textContent?.trim() || '';
+                                    const prevModuleCode = parseModuleCodeFromMaterialTitle(prevTitle);
+
+                                    // 1) Check previous module finished (100%)
+                                    if (prevMid) {
+                                        const prevAvg = getMaterialAverageProgress(prevMid);
+                                        if (prevAvg < 100) {
+                                            showPrereqModal(prevMid, 'not_finished');
+                                            return;
+                                        }
+                                    }
+
+                                    // 2) Check previous module post-test passed
+                                    if (prevModuleCode) {
+                                        const st = POSTTEST_STATUS.get(`${category}::${prevModuleCode}`);
+                                        if (!st) {
+                                            showPrereqModal(prevMid, 'not_taken');
+                                            return;
+                                        }
+                                        if (st.passed !== true) {
+                                            showPrereqModal(prevMid, 'failed');
+                                            return;
+                                        }
+                                    }
+                                }
+                            }
+                        } catch (err) {
+                            console.error('Prereq check failed:', err);
+                        }
+                    } else {
+                        bypassPrereqOnce = false;
+                    }
                     destroyModal();
 
                     try {
@@ -1207,20 +1314,6 @@ $cats = ['Analytical Chemistry', 'Organic Chemistry', 'Physical Chemistry', 'Ino
             };
 
             async function openSingleFile(fid) {
-                try {
-                    const mr = await fetch(`../partial/get_material_from_file.php?fid=${fid}`);
-                    const mj = await mr.json();
-                    const targetMid = mj?.material_id ? String(mj.material_id) : null;
-                    if (targetMid) {
-                        if (isSwitchBlocked(targetMid)) {
-                            showSwitchBlockedMessage();
-                            return;
-                        }
-                        activeMaterialId = targetMid;
-                        // If user jumps into a file, start/refresh the lock window
-                        setMaterialLastActivity(activeMaterialId, Date.now());
-                    }
-                } catch (e) {}
 
                 fetch(`../partial/get_one_file.php?fid=${fid}`)
                     .then(r => r.json())
@@ -1255,9 +1348,9 @@ $cats = ['Analytical Chemistry', 'Organic Chemistry', 'Physical Chemistry', 'Ino
             }
 
             function setupPdfTimeTracking(fileId, url) {
-                const MIN_SECONDS = 120; 
-                const MAX_SECONDS = 2400; 
-                const SECONDS_PER_MB = 300; 
+                const MIN_SECONDS = 120;
+                const MAX_SECONDS = 2400;
+                const SECONDS_PER_MB = 300;
 
                 async function getPdfSizeBytes(u) {
                     try {
@@ -1331,7 +1424,6 @@ $cats = ['Analytical Chemistry', 'Organic Chemistry', 'Physical Chemistry', 'Ino
             }
 
             function saveProgress(fid, pct) {
-                if (activeMaterialId) setMaterialLastActivity(activeMaterialId, Date.now());
                 fetch('../partial/save_progress.php', {
                     method: 'POST',
                     headers: {
@@ -1346,10 +1438,10 @@ $cats = ['Analytical Chemistry', 'Organic Chemistry', 'Physical Chemistry', 'Ino
             // =============================
 
             const __progressState = {
-                lastSavedPct: new Map(), 
-                lastSentAt: new Map(), 
-                lastUiPct: new Map(), 
-                cleanups: [], 
+                lastSavedPct: new Map(),
+                lastSentAt: new Map(),
+                lastUiPct: new Map(),
+                cleanups: [],
             };
 
             function registerCleanup(fn) {
@@ -1381,7 +1473,7 @@ $cats = ['Analytical Chemistry', 'Organic Chemistry', 'Physical Chemistry', 'Ino
                 pct = Math.round(clampPct(pct));
 
                 const prev = __progressState.lastSavedPct.get(String(fileId)) ?? 0;
-                if (pct < prev) pct = prev; 
+                if (pct < prev) pct = prev;
 
                 const now = Date.now();
                 const lastAt = __progressState.lastSentAt.get(String(fileId)) ?? 0;
@@ -1508,7 +1600,7 @@ $cats = ['Analytical Chemistry', 'Organic Chemistry', 'Physical Chemistry', 'Ino
                 const vid = extractYouTubeId(url);
                 // If can't extract id, we can't use API reliably, fallback to marking 100 after some watch time.
                 if (!vid) {
-                    startTimeBasedTracking(fileId, 420); 
+                    startTimeBasedTracking(fileId, 420);
                     return;
                 }
 
