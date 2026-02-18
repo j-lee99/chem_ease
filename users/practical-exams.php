@@ -984,7 +984,27 @@ $cats = ['Analytical Chemistry', 'Organic Chemistry', 'Physical Chemistry', 'Ino
         </div>
     </div>
 
-    <!-- Exam Modal -->
+    
+    <!-- Gate / Locked Content Modal -->
+    <div class="modal fade" id="gateModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header primary-blue-header">
+                    <h5 class="modal-title">Content locked</h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body" id="gateModalMessage">
+                    Locked content.
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                    <button type="button" class="btn btn-primary" id="gateGoBackBtn">Go to module</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+<!-- Exam Modal -->
     <div class="modal fade" id="examModal" tabindex="-1" data-bs-backdrop="static" data-bs-keyboard="false">
         <div class="modal-dialog modal-xl">
             <div class="modal-content">
@@ -1315,11 +1335,6 @@ $cats = ['Analytical Chemistry', 'Organic Chemistry', 'Physical Chemistry', 'Ino
                     difficulty === 'Intermediate' ? 'warning' :
                     'danger';
 
-                if (e.user_score !== null && e.user_score !== undefined) {
-                    totalScore += Number(e.user_score) || 0;
-                    totalAttempts++;
-                }
-
                 let shortDesc = e.description || 'No description available.';
                 if (shortDesc.length > 120) shortDesc = shortDesc.slice(0, 117) + '...';
 
@@ -1327,25 +1342,36 @@ $cats = ['Analytical Chemistry', 'Organic Chemistry', 'Physical Chemistry', 'Ino
                 const safeDesc = escapeAttr(e.description || '');
                 const safeTopic = escapeAttr(e.topic || 'Not specified');
                 const totalItems = e.total_questions || e.actual_questions;
-                const passingItems = e.passing_score ?
-                    Math.ceil((e.passing_score / 100) * totalItems) :
+
+                // Percent helpers (we now display % instead of raw score like 30/30)
+                const toPercent = (score, total) => {
+                    const s = Number(score);
+                    const t = Number(total) || 0;
+                    if (!isFinite(s) || !isFinite(t) || t <= 0) return null;
+                    return Math.round((s / t) * 100);
+                };
+
+                const passingPercent = (e.passing_score !== null && e.passing_score !== undefined) ?
+                    Math.round(Number(e.passing_score)) :
                     null;
+
+                const bestPercent = (e.user_score !== null && e.user_score !== undefined) ?
+                    toPercent(e.user_score, totalItems) :
+                    null;
+
+
+                if (bestPercent !== null) {
+                    totalScore += Number(bestPercent) || 0;
+                    totalAttempts++;
+                }
+
+                examMetaMap.set(e.id, { title: e.title, category, moduleCode: getModuleCodeFromPostTestTitle(e.title) });
 
                 const div = document.createElement('div');
                 div.className = 'exam-card';
                 div.style.cursor = 'pointer';
 
-                div.onclick = () => openDetailsModal(
-                    e.id,
-                    safeTitle,
-                    safeDesc,
-                    difficulty,
-                    totalItems,
-                    e.duration_minutes,
-                    passingItems,
-                    safeTopic,
-                    e.user_score ?? null
-                );
+                div.onclick = () => openDetailsModal(e.id, safeTitle, safeDesc, difficulty, totalItems, e.duration_minutes, passingPercent, safeTopic, bestPercent, category);
 
                 div.innerHTML = `
             <div class="exam-card-content">
@@ -1370,9 +1396,9 @@ $cats = ['Analytical Chemistry', 'Organic Chemistry', 'Physical Chemistry', 'Ino
                     ${e.user_score ? 'Retake' : 'Take'} Exam <i class="fas fa-play"></i>
                 </div>
                 ${
-                    e.user_score !== null && e.user_score !== undefined
+                    bestPercent !== null
                         ? `<small class="d-block text-center text-success mt-2">
-                            Your best: ${e.user_score}/${totalItems}
+                            Your best: ${bestPercent}%
                           </small>`
                         : ''
                 }
@@ -1389,7 +1415,7 @@ $cats = ['Analytical Chemistry', 'Organic Chemistry', 'Physical Chemistry', 'Ino
 
             grid.appendChild(fragment);
 
-            document.getElementById('avgScore').textContent =
+            document.getElementById('userAvg').textContent =
                 totalAttempts ? Math.round(totalScore / totalAttempts) + '%' : '—';
         }
 
@@ -1406,16 +1432,78 @@ $cats = ['Analytical Chemistry', 'Organic Chemistry', 'Physical Chemistry', 'Ino
         }
 
 
-        function openDetailsModal(id, title, description, difficulty, questions, duration, passingScore, topic, bestScore) {
+
+        // ---- Gate / locked content helpers ----
+        let currentExamMeta = null; // { id, title, category, moduleCode }
+        const examMetaMap = new Map(); // examId -> { title, category, moduleCode }
+        let gateTarget = null;      // { category, moduleCode }
+
+        function showGate(message, target) {
+            const el = document.getElementById('gateModalMessage');
+            if (el) el.textContent = message || 'Locked content.';
+            gateTarget = target || null;
+            const mEl = document.getElementById('gateModal');
+            const m = bootstrap.Modal.getInstance(mEl) || new bootstrap.Modal(mEl);
+            m.show();
+        }
+
+        function isPostTestTitle(title) {
+            return /POST TEST\s*\(Module\s+/i.test(String(title || ''));
+        }
+
+        function getModuleCodeFromPostTestTitle(title) {
+            const m = String(title || '').match(/POST TEST\s*\(Module\s+([A-Za-z0-9IVXLCDM]+)\)/i);
+            return m ? m[1].trim() : null;
+        }
+
+        async function isModuleProgressComplete(moduleCode, category) {
+            if (!moduleCode || !category) return false;
+            try {
+                const resp = await fetch('../partial/get_progress.php');
+                const json = await resp.json();
+                const data = Array.isArray(json.data) ? json.data : [];
+
+                const target = data.find(m =>
+                    String(m.category || '') === String(category) &&
+                    new RegExp(`^\\s*Module\\s+${moduleCode}\\s*\\.`, 'i').test(String(m.title || ''))
+                );
+
+                if (!target || !Array.isArray(target.files) || target.files.length === 0) return false;
+                return target.files.every(f => Number(f.progress || 0) >= 100);
+            } catch (e) {
+                console.error('Failed to check progress', e);
+                return false;
+            }
+        }
+
+        document.getElementById('gateGoBackBtn')?.addEventListener('click', () => {
+            const mEl = document.getElementById('gateModal');
+            bootstrap.Modal.getInstance(mEl)?.hide();
+
+            if (!gateTarget || !gateTarget.category || !gateTarget.moduleCode) return;
+
+            // Let study-materials page auto-open the module (if it supports it)
+            try {
+                sessionStorage.setItem('chemEase_open_module', JSON.stringify(gateTarget));
+            } catch (e) {}
+
+            // Redirect to study materials (index router)
+            window.location.href = 'index?page=study-materials';
+        });
+
+        function openDetailsModal(id, title, description, difficulty, questions, duration, passingScore, topic, bestScore, category) {
             document.getElementById('detailsModalLabel').textContent = title;
             document.getElementById('detailsDescription').textContent = description || 'No description available.';
             document.getElementById('detailsTopic').textContent = topic;
             document.getElementById('detailsDifficulty').textContent = difficulty;
             document.getElementById('detailsQuestions').textContent = questions;
             document.getElementById('detailsDuration').textContent = duration;
-            document.getElementById('detailsPassingScore').textContent = `${passingScore}%`;
+            document.getElementById('detailsPassingScore').textContent =
+                (passingScore !== null && passingScore !== undefined && passingScore !== 'null') ?
+                `${passingScore}%` :
+                '—';
 
-            if (bestScore !== null && bestScore !== 'null' && bestScore !== 'undefined') {
+            if (bestScore !== null && bestScore !== 'null' && bestScore !== 'undefined' && bestScore !== 0 && bestScore !== '0') {
                 document.getElementById('detailsBestScore').textContent = `${bestScore}%`;
                 document.getElementById('bestScoreRow').style.display = 'block';
                 document.getElementById('startFromDetailsText').textContent = 'Retake Exam';
@@ -1425,24 +1513,43 @@ $cats = ['Analytical Chemistry', 'Organic Chemistry', 'Physical Chemistry', 'Ino
             }
 
             currentExamIdForStart = id;
+            currentExamMeta = { id, title, category, moduleCode: getModuleCodeFromPostTestTitle(title) };
             showModal('detailsModal');
         }
 
         document.getElementById('startFromDetailsBtn').addEventListener('click', function() {
-            bootstrap.Modal.getInstance(document.getElementById('detailsModal')).hide();
-            if (currentExamIdForStart) {
-                redirectToExam(currentExamIdForStart);
-            }
+            if (!currentExamIdForStart) return;
+            bootstrap.Modal.getInstance(document.getElementById('detailsModal'))?.hide();
+            redirectToExam(currentExamIdForStart);
         });
 
-        function redirectToExam() {
-            if (!currentExamIdForStart) {
+        async function redirectToExam(examId) {
+            if (!examId) {
                 console.log(currentExamIdForStart)
                 alert("Invalid exam.");
                 return;
             }
 
-            window.location.href = `take-exam.php?exam_id=${currentExamIdForStart}`;
+
+            // Content lock check happens HERE (when user clicks Take/Start Exam)
+            const meta = (currentExamMeta && currentExamMeta.id === examId)
+                ? currentExamMeta
+                : (examMetaMap.get(examId) || null);
+
+            if (meta && isPostTestTitle(meta.title)) {
+                const category = meta.category;
+                const moduleCode = meta.moduleCode || getModuleCodeFromPostTestTitle(meta.title);
+                const ok = await isModuleProgressComplete(moduleCode, category);
+                if (!ok) {
+                    showGate(
+                        "Locked content. You may have failed or haven't taken the previous exam, or you haven't finished the previous module/lesson yet.",
+                        { category, moduleCode }
+                    );
+                    return;
+                }
+            }
+
+            window.location.href = `take-exam.php?exam_id=${examId}`;
         }
 
 
@@ -1766,7 +1873,6 @@ $cats = ['Analytical Chemistry', 'Organic Chemistry', 'Physical Chemistry', 'Ino
 
     <script>
         document.addEventListener("DOMContentLoaded", () => {
-            // Defensive cleanup: remove any stuck modal backdrop that could block clicks (e.g., profile icon)
             document.querySelectorAll(".modal-backdrop").forEach(b => b.remove());
             document.body.classList.remove("modal-open");
             document.body.style.removeProperty("padding-right");
