@@ -84,7 +84,7 @@ $_SESSION['role']         = $user['role'];
 $_SESSION['profile_image']= $user['profile_image'] ?? null;
 
 // Decide redirect based on role
-$redirect = ($user['role'] === 'admin') 
+$redirect = ($user['role'] === 'admin' || $user['role'] == 'super_admin') 
     ? 'admin/index.php' 
     : 'users/index.php';
 
