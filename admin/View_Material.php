@@ -2,7 +2,11 @@
 session_start();
 require_once '../partial/db_conn.php';
 
-if (!isset($_SESSION['user_id']) || ($_SESSION['role'] ?? '') !== 'admin') {
+$role = $_SESSION['role'] ?? '';
+$isAdmin = ($role === 'admin');
+$isSuperAdmin = ($role === 'super_admin');
+
+if (!isset($_SESSION['user_id']) || ($_SESSION['role'] ?? '') === 'user') {
     header("Location: ../index.php");
     exit();
 }
@@ -145,6 +149,38 @@ if (count($pdfs) > 0) {
             color: #6c757d;
         }
 
+        .modal-header {
+            background: var(--primary);
+            color: white;
+        }
+
+        .modal-title {
+            font-weight: 700;
+        }
+
+        .editable-file-name {
+            flex: 1;
+            margin: 0 0.5rem;
+            padding: 0.4rem 0.8rem;
+            border: 1px solid #ced4da;
+            border-radius: 6px;
+            font-size: 0.95rem;
+        }
+
+        .delete-file-btn {
+            color: var(--danger);
+            background: none;
+            border: none;
+            font-size: 1.1rem;
+            cursor: pointer;
+            padding: 0.3rem 0.6rem;
+        }
+
+        .delete-file-btn:hover {
+            color: #c82333;
+        }
+
+
         .viewer-area {
             background: #fff;
             min-height: 70vh;
@@ -215,9 +251,17 @@ if (count($pdfs) > 0) {
                     <a href="Learning_Material.php" class="btn btn-outline-secondary">
                         <i class="fas fa-arrow-left me-2"></i>Back
                     </a>
-                    <button class="btn btn-outline-primary" onclick="openFirst()">
-                        <i class="fas fa-eye me-2"></i>Open First Item
+                    <?php if ($isAdmin || $isSuperAdmin): ?>
+                    <button type="button" class="btn btn-outline-primary" id="editMaterialBtn">
+                        <i class="fas fa-pen me-2"></i>Edit
                     </button>
+                    <button type="button" class="btn btn-outline-danger" id="deleteMaterialBtn">
+                        <i class="fas fa-trash me-2"></i>Delete
+                    </button>
+                    <?php endif; ?>
+                    <!-- <button class="btn btn-outline-primary" onclick="openFirst()">
+                        <i class="fas fa-eye me-2"></i>Open First Item
+                    </button> -->
                 </div>
             </div>
 
@@ -300,8 +344,164 @@ if (count($pdfs) > 0) {
         </div>
     </div>
 
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.0/js/bootstrap.bundle.min.js"></script>
+    
+
+<!-- Edit Modal (unchanged) -->
+    <div class="modal fade" id="editModal" tabindex="-1" data-bs-backdrop="static" data-bs-keyboard="false">
+        <div class="modal-dialog modal-xl">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Edit Material</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <form id="editForm" enctype="multipart/form-data">
+                    <input type="hidden" name="material_id" id="edit_material_id">
+                    <div class="modal-body">
+                        <div class="row">
+                            <div class="col-md-8">
+                                <div class="mb-3">
+                                    <label class="form-label">Title *</label>
+                                    <input type="text" name="title" id="edit_title" class="form-control" required>
+                                </div>
+                                <div class="mb-3">
+                                    <label class="form-label">Description</label>
+                                    <textarea name="description" id="edit_description" class="form-control" rows="3"></textarea>
+                                </div>
+                                <div class="mb-3">
+                                    <label class="form-label">Category *</label>
+                                    <select name="category" id="edit_category" class="form-select" required>
+                                        <option value="Analytical Chemistry">Analytical Chemistry</option>
+                                        <option value="Organic Chemistry">Organic Chemistry</option>
+                                        <option value="Physical Chemistry">Physical Chemistry</option>
+                                        <option value="Inorganic Chemistry">Inorganic Chemistry</option>
+                                        <option value="BioChemistry">BioChemistry</option>
+                                    </select>
+                                </div>
+                            </div>
+                            <div class="col-md-4">
+                                <h6>Upload New PDF Files</h6>
+                                <div class="mb-3">
+                                    <input type="file" name="new_pdfs[]" accept=".pdf" class="form-control" multiple>
+                                </div>
+                                <h6>Add New YouTube URLs</h6>
+                                <div class="mb-3">
+                                    <textarea name="new_youtube_urls" class="form-control" rows="4" placeholder="One URL per line..."></textarea>
+                                </div>
+                            </div>
+                        </div>
+                        <hr>
+                        <h5>Existing Files</h5>
+                        <div id="edit_file_list" class="file-list mt-3"></div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                        <button type="submit" class="btn btn-success">Save Changes</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+    
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.0/js/bootstrap.bundle.min.js"></script>
     <script>
+        const CAN_MANAGE_MATERIALS = <?= ($isAdmin || $isSuperAdmin) ? 'true' : 'false' ?>;
+        const MATERIAL_ID = <?= (int)$materialId ?>;
+
+        async function loadEditModal(materialId) {
+            try {
+                const resp = await fetch(`../partial/get_material_details.php?id=${materialId}`);
+                const data = await resp.json();
+                if (data.status !== 'success') {
+                    alert('Failed to load material details');
+                    return;
+                }
+                document.getElementById('edit_material_id').value = materialId;
+                document.getElementById('edit_title').value = data.title || '';
+                document.getElementById('edit_description').value = data.description || '';
+                document.getElementById('edit_category').value = data.category || '';
+                const fileList = document.getElementById('edit_file_list');
+                let html = '';
+                if (data.pdfs?.length) {
+                    html += '<h6 class="mt-3">Existing PDF Files</h6>';
+                    data.pdfs.forEach(f => {
+                        const currentName = (f.path || '').split('/').pop();
+                        html += `
+                            <div class="file-item pdf d-flex align-items-center mb-2" data-file-id="${f.id}">
+                                <i class="fas fa-file-pdf me-3"></i>
+                                <input type="text" class="editable-file-name" value="${currentName}" name="pdf_names[${f.id}]">
+                                <button class="delete-file-btn" type="button" data-file-id="${f.id}" data-type="pdf">
+                                    <i class="fas fa-trash"></i>
+                                </button>
+                            </div>`;
+                    });
+                }
+                if (data.videos?.length) {
+                    html += '<h6 class="mt-3">Existing YouTube Links</h6>';
+                    data.videos.forEach(v => {
+                        html += `
+                            <div class="file-item youtube d-flex align-items-center mb-2" data-file-id="${v.id}">
+                                <i class="fas fa-play-circle me-3"></i>
+                                <input type="text" class="editable-file-name" value="${v.path || ''}" name="youtube_urls[${v.id}]">
+                                <button class="delete-file-btn" type="button" data-file-id="${v.id}" data-type="youtube">
+                                    <i class="fas fa-trash"></i>
+                                </button>
+                            </div>`;
+                    });
+                }
+                if (!data.pdfs?.length && !data.videos?.length) {
+                    html += '<p class="text-muted text-center mt-3">No files attached yet.</p>';
+                }
+                fileList.innerHTML = html;
+
+                // clear old delete_* hidden inputs from previous opens
+                document.querySelectorAll('#editForm input[type="hidden"][name^="delete_"]').forEach(el => el.remove());
+
+                const modal = new bootstrap.Modal(document.getElementById('editModal'));
+                modal.show();
+
+                document.querySelectorAll('.delete-file-btn').forEach(btn => {
+                    btn.onclick = () => {
+                        if (!confirm('Remove this file/link?')) return;
+                        const fileId = btn.dataset.fileId;
+                        const type = btn.dataset.type;
+                        btn.closest('.file-item')?.remove();
+
+                        const hidden = document.createElement('input');
+                        hidden.type = 'hidden';
+                        hidden.name = `delete_${type}[]`;
+                        hidden.value = fileId;
+                        document.getElementById('editForm').appendChild(hidden);
+                    };
+                });
+            } catch (err) {
+                alert('Error loading edit data');
+                console.error(err);
+            }
+        }
+
+        async function deleteMaterial(materialId) {
+            if (!confirm('Delete this title and all attached files? This cannot be undone.')) return;
+            try {
+                const resp = await fetch('../partial/delete_material_api.php', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/x-www-form-urlencoded'
+                    },
+                    body: 'id=' + encodeURIComponent(materialId)
+                });
+                const data = await resp.json();
+                if (data.status === 'success') {
+                    window.location.href = 'Learning_Material.php';
+                } else {
+                    alert('Error: ' + (data.error || 'Unknown'));
+                }
+            } catch (err) {
+                alert('Network error');
+            }
+        }
+
+
         function toggleSidebar() {
             document.querySelectorAll('.sidebar, .top-navbar, .main-content').forEach(el => el.classList.toggle('collapsed'));
             const i = document.querySelector('.collapse-btn i');
@@ -347,6 +547,31 @@ if (count($pdfs) > 0) {
         window.addEventListener('DOMContentLoaded', () => {
             const first = document.querySelector('.file-link');
             if (first) selectItem(first);
+
+            if (CAN_MANAGE_MATERIALS) {
+                document.getElementById('editMaterialBtn')?.addEventListener('click', () => loadEditModal(MATERIAL_ID));
+                document.getElementById('deleteMaterialBtn')?.addEventListener('click', () => deleteMaterial(MATERIAL_ID));
+            }
+        });
+
+        document.getElementById('editForm')?.addEventListener('submit', async e => {
+            e.preventDefault();
+            const formData = new FormData(e.target);
+            try {
+                const resp = await fetch('../partial/update_material_api.php', {
+                    method: 'POST',
+                    body: formData
+                });
+                const data = await resp.json();
+                alert(data.message || data.error || 'Unknown response');
+                if (data.status === 'success') {
+                    bootstrap.Modal.getInstance(document.getElementById('editModal')).hide();
+                    // Refresh to update title/description list
+                    window.location.reload();
+                }
+            } catch (err) {
+                alert('Update failed');
+            }
         });
     </script>
 </body>

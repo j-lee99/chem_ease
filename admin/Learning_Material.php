@@ -1,8 +1,11 @@
 <?php
 session_start();
 require_once '../partial/db_conn.php';
-// If NOT logged in OR not admin → back to login
-if (!isset($_SESSION['user_id']) || $_SESSION['role'] !== 'admin') {
+
+$role = $_SESSION['role'] ?? '';
+$isAdmin = ($role === 'admin');
+$isSuperAdmin = ($role === 'super_admin');
+if (!isset($_SESSION['user_id']) || !in_array(($_SESSION['role'] ?? ''), ['admin','super_admin'], true)) {
     header("Location: ../index.php");
     exit();
 }
@@ -317,10 +320,18 @@ if (!isset($_SESSION['user_id']) || $_SESSION['role'] !== 'admin') {
         </div>
         <nav class="sidebar-nav">
             <div class="nav-item"><a href="index.php" class="nav-link"><i class="fas fa-home"></i><span>Dashboard</span></a></div>
-            <div class="nav-item"><a href="Users.php" class="nav-link"><i class="fas fa-users"></i><span>Users</span></a></div>
+
+            <?php if ($isSuperAdmin): ?>
+                <div class="nav-item"><a href="Users.php" class="nav-link"><i class="fas fa-users"></i><span>Users</span></a></div>
+            <?php endif; ?>
+
             <div class="nav-item"><a href="Learning_Material.php" class="nav-link active"><i class="fas fa-book"></i><span>Learning Materials</span></a></div>
             <div class="nav-item"><a href="Practice_Exams.php" class="nav-link"><i class="fas fa-clipboard-list"></i><span>Practice Exams</span></a></div>
-            <div class="nav-item"><a href="Discussion_Forums.php" class="nav-link"><i class="fas fa-comments"></i><span>Discussion Forums</span></a></div>
+
+            <?php if ($isSuperAdmin): ?>
+                <div class="nav-item"><a href="Discussion_Forums.php" class="nav-link"><i class="fas fa-comments"></i><span>Discussion Forums</span></a></div>
+                <div class="nav-item"><a href="Generate_Reports.php" class="nav-link"><i class="fas fa-file-lines"></i><span>Generate Reports</span></a></div>
+            <?php endif; ?>
         </nav>
     </div>
 
@@ -441,64 +452,8 @@ if (!isset($_SESSION['user_id']) || $_SESSION['role'] !== 'admin') {
         </div>
     </div>
 
-    <!-- Edit Modal (unchanged) -->
-    <div class="modal fade" id="editModal" tabindex="-1" data-bs-backdrop="static" data-bs-keyboard="false">
-        <div class="modal-dialog modal-xl">
-            <div class="modal-content">
-                <div class="modal-header">
-                    <h5 class="modal-title">Edit Material</h5>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-                </div>
-                <form id="editForm" enctype="multipart/form-data">
-                    <input type="hidden" name="material_id" id="edit_material_id">
-                    <div class="modal-body">
-                        <div class="row">
-                            <div class="col-md-8">
-                                <div class="mb-3">
-                                    <label class="form-label">Title *</label>
-                                    <input type="text" name="title" id="edit_title" class="form-control" required>
-                                </div>
-                                <div class="mb-3">
-                                    <label class="form-label">Description</label>
-                                    <textarea name="description" id="edit_description" class="form-control" rows="3"></textarea>
-                                </div>
-                                <div class="mb-3">
-                                    <label class="form-label">Category *</label>
-                                    <select name="category" id="edit_category" class="form-select" required>
-                                        <option value="Analytical Chemistry">Analytical Chemistry</option>
-                                        <option value="Organic Chemistry">Organic Chemistry</option>
-                                        <option value="Physical Chemistry">Physical Chemistry</option>
-                                        <option value="Inorganic Chemistry">Inorganic Chemistry</option>
-                                        <option value="BioChemistry">BioChemistry</option>
-                                    </select>
-                                </div>
-                            </div>
-                            <div class="col-md-4">
-                                <h6>Upload New PDF Files</h6>
-                                <div class="mb-3">
-                                    <input type="file" name="new_pdfs[]" accept=".pdf" class="form-control" multiple>
-                                </div>
-                                <h6>Add New YouTube URLs</h6>
-                                <div class="mb-3">
-                                    <textarea name="new_youtube_urls" class="form-control" rows="4" placeholder="One URL per line..."></textarea>
-                                </div>
-                            </div>
-                        </div>
-                        <hr>
-                        <h5>Existing Files</h5>
-                        <div id="edit_file_list" class="file-list mt-3"></div>
-                    </div>
-                    <div class="modal-footer">
-                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-                        <button type="submit" class="btn btn-success">Save Changes</button>
-                    </div>
-                </form>
-            </div>
-        </div>
-    </div>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.0/js/bootstrap.bundle.min.js"></script>
-    <script>
-        document.addEventListener('DOMContentLoaded', function() {
+    <script>        document.addEventListener('DOMContentLoaded', function() {
             function toggleSidebar() {
                 document.querySelectorAll('.sidebar, .top-navbar, .main-content').forEach(el => el.classList.toggle('collapsed'));
                 const i = document.querySelector('.collapse-btn i');
@@ -515,7 +470,7 @@ if (!isset($_SESSION['user_id']) || $_SESSION['role'] !== 'admin') {
                 if (isLoading) return;
                 isLoading = true;
                 const grid = document.getElementById('materialsGrid');
-                if (!grid) return;
+                if (!grid) { isLoading = false; return; }
                 if (!append) {
                     grid.innerHTML = '<div class="text-center py-5"><div class="spinner-border text-primary"></div><p class="mt-3 text-muted">Loading...</p></div>';
                 }
@@ -523,7 +478,10 @@ if (!isset($_SESSION['user_id']) || $_SESSION['role'] !== 'admin') {
                     // const url = `../partial/get_materials_paginated.php?page=${page}&search=${encodeURIComponent(currentSearch)}`;
                     const url = `../partial/get_materials_paginated.php?all=1&search=${encodeURIComponent(currentSearch)}`;
                     const resp = await fetch(url);
-                    console.log(resp)
+                    if (!resp.ok) {
+                        const text = await resp.text().catch(() => '');
+                        throw new Error(`HTTP ${resp.status} ${resp.statusText} ${text ? '- ' + text.slice(0, 200) : ''}`);
+                    }
                     const data = await resp.json();
                     if (!append) grid.innerHTML = '';
                     if (!data.folders || Object.keys(data.folders).length === 0) {
@@ -561,7 +519,7 @@ if (!isset($_SESSION['user_id']) || $_SESSION['role'] !== 'admin') {
                     attachCardEvents();
                 } catch (err) {
                     console.error(err);
-                    grid.innerHTML = '<div class="text-center py-5 text-danger">Error loading materials.</div>';
+                    grid.innerHTML = `<div class="text-center py-5 text-danger">Error loading materials.<br><small>${(err && err.message) ? err.message : ''}</small></div>`;
                 } finally {
                     isLoading = false;
                 }
@@ -588,38 +546,6 @@ if (!isset($_SESSION['user_id']) || $_SESSION['role'] !== 'admin') {
             });
 
             function attachCardEvents() {
-                document.querySelectorAll('.delete-btn').forEach(btn => {
-                    btn.onclick = async e => {
-                        e.stopPropagation();
-                        if (!confirm('Delete this title and all attached files? This cannot be undone.')) return;
-                        try {
-                            const resp = await fetch('../partial/delete_material_api.php', {
-                                method: 'POST',
-                                headers: {
-                                    'Content-Type': 'application/x-www-form-urlencoded'
-                                },
-                                body: 'id=' + btn.dataset.id
-                            });
-                            const data = await resp.json();
-                            if (data.status === 'success') {
-                                loadMaterials(currentPage, false);
-                            } else {
-                                alert('Error: ' + (data.error || 'Unknown'));
-                            }
-                        } catch (err) {
-                            alert('Network error');
-                        }
-                    };
-                });
-
-                document.querySelectorAll('.edit-btn').forEach(btn => {
-                    btn.onclick = async e => {
-                        e.stopPropagation();
-                        const id = btn.dataset.id;
-                        await loadEditModal(id);
-                    };
-                });
-
                 document.querySelectorAll('.clickable-card').forEach(card => {
                     card.onclick = () => {
                         const id = card.dataset.id;
@@ -687,7 +613,6 @@ if (!isset($_SESSION['user_id']) || $_SESSION['role'] !== 'admin') {
 
             function buildMaterialCard(row) {
                 const catClass = row.category.toLowerCase().replace(/ /g, '-');
-
                 return `
     <div class="material-card clickable-card" data-id="${row.id}" style="cursor:pointer;">
       <div class="material-thumbnail ${catClass}">
@@ -698,20 +623,17 @@ if (!isset($_SESSION['user_id']) || $_SESSION['role'] !== 'admin') {
         <h3 class="material-title">${row.title}</h3>
         <div class="material-type"><span>${row.file_count} item(s)</span></div>
         <span class="material-category ${catClass}">${row.category}</span>
+        
       </div>
     </div>
   `;
             }
 
-
-
-            // ── ADD MODAL FILE PREVIEW LOGIC (NOW WITH CLICKABLE PDF PREVIEW) ───────
             const pdfInput = document.getElementById('pdfInput');
             const pdfPreview = document.getElementById('pdfPreview');
             const youtubeInput = document.getElementById('youtubeInput');
             const youtubePreview = document.getElementById('youtubePreview');
 
-            // PDF preview + clickable to view
             pdfInput?.addEventListener('change', function() {
                 pdfPreview.innerHTML = '';
                 pdfPreview.style.display = 'none';
@@ -733,16 +655,14 @@ if (!isset($_SESSION['user_id']) || $_SESSION['role'] !== 'admin') {
                     `;
                     pdfPreview.appendChild(item);
 
-                    // Click anywhere on item (except trash) → open preview
                     item.addEventListener('click', (e) => {
-                        if (e.target.closest('.remove-preview-btn')) return; // don't open if clicking trash
+                        if (e.target.closest('.remove-preview-btn')) return; 
                         const url = URL.createObjectURL(file);
                         window.open(url, '_blank');
-                        // Clean up object URL after some time (optional)
+
                         setTimeout(() => URL.revokeObjectURL(url), 30000);
                     });
 
-                    // Remove file on trash click
                     item.querySelector('.remove-preview-btn').onclick = (e) => {
                         e.stopPropagation();
                         const dt = new DataTransfer();
@@ -756,7 +676,6 @@ if (!isset($_SESSION['user_id']) || $_SESSION['role'] !== 'admin') {
                 });
             });
 
-            // YouTube preview (not clickable – can't preview locally)
             function updateYoutubePreview() {
                 youtubePreview.innerHTML = '';
                 youtubePreview.style.display = 'none';
@@ -791,7 +710,6 @@ if (!isset($_SESSION['user_id']) || $_SESSION['role'] !== 'admin') {
 
             youtubeInput?.addEventListener('input', updateYoutubePreview);
 
-            // Reset previews when modal is hidden
             const addModalEl = document.getElementById('addModal');
             addModalEl?.addEventListener('hidden.bs.modal', () => {
                 pdfInput.value = '';
@@ -800,93 +718,6 @@ if (!isset($_SESSION['user_id']) || $_SESSION['role'] !== 'admin') {
                 pdfPreview.style.display = 'none';
                 youtubePreview.innerHTML = '';
                 youtubePreview.style.display = 'none';
-            });
-
-            // ── Existing Edit Modal Logic (unchanged) ────────────────────────────────
-            async function loadEditModal(materialId) {
-                try {
-                    const resp = await fetch(`../partial/get_material_details.php?id=${materialId}`);
-                    const data = await resp.json();
-                    if (data.status !== 'success') {
-                        alert('Failed to load material details');
-                        return;
-                    }
-                    document.getElementById('edit_material_id').value = materialId;
-                    document.getElementById('edit_title').value = data.title || '';
-                    document.getElementById('edit_description').value = data.description || '';
-                    document.getElementById('edit_category').value = data.category || '';
-                    const fileList = document.getElementById('edit_file_list');
-                    let html = '';
-                    if (data.pdfs?.length) {
-                        html += '<h6 class="mt-3">Existing PDF Files</h6>';
-                        data.pdfs.forEach(f => {
-                            const currentName = f.path.split('/').pop();
-                            html += `
-                            <div class="file-item pdf d-flex align-items-center mb-2" data-file-id="${f.id}">
-                                <i class="fas fa-file-pdf me-3"></i>
-                                <input type="text" class="editable-file-name" value="${currentName}" name="pdf_names[${f.id}]">
-                                <button class="delete-file-btn" type="button" data-file-id="${f.id}" data-type="pdf">
-                                    <i class="fas fa-trash"></i>
-                                </button>
-                            </div>`;
-                        });
-                    }
-                    if (data.videos?.length) {
-                        html += '<h6 class="mt-3">Existing YouTube Links</h6>';
-                        data.videos.forEach(v => {
-                            html += `
-                            <div class="file-item youtube d-flex align-items-center mb-2" data-file-id="${v.id}">
-                                <i class="fas fa-play-circle me-3"></i>
-                                <input type="text" class="editable-file-name" value="${v.path}" name="youtube_urls[${v.id}]">
-                                <button class="delete-file-btn" type="button" data-file-id="${v.id}" data-type="youtube">
-                                    <i class="fas fa-trash"></i>
-                                </button>
-                            </div>`;
-                        });
-                    }
-                    if (!data.pdfs?.length && !data.videos?.length) {
-                        html += '<p class="text-muted text-center mt-3">No files attached yet.</p>';
-                    }
-                    fileList.innerHTML = html;
-                    const modal = new bootstrap.Modal(document.getElementById('editModal'));
-                    modal.show();
-                    document.querySelectorAll('.delete-file-btn').forEach(btn => {
-                        btn.onclick = () => {
-                            if (!confirm('Remove this file/link?')) return;
-                            const fileId = btn.dataset.fileId;
-                            const type = btn.dataset.type;
-                            const item = btn.closest('.file-item');
-                            item.remove();
-                            const hidden = document.createElement('input');
-                            hidden.type = 'hidden';
-                            hidden.name = `delete_${type}[]`;
-                            hidden.value = fileId;
-                            document.getElementById('editForm').appendChild(hidden);
-                        };
-                    });
-                } catch (err) {
-                    alert('Error loading edit data');
-                    console.error(err);
-                }
-            }
-
-            document.getElementById('editForm')?.addEventListener('submit', async e => {
-                e.preventDefault();
-                const formData = new FormData(e.target);
-                try {
-                    const resp = await fetch('../partial/update_material_api.php', {
-                        method: 'POST',
-                        body: formData
-                    });
-                    const data = await resp.json();
-                    alert(data.message || data.error || 'Unknown response');
-                    if (data.status === 'success') {
-                        bootstrap.Modal.getInstance(document.getElementById('editModal')).hide();
-                        loadMaterials(currentPage, false);
-                    }
-                } catch (err) {
-                    alert('Update failed');
-                }
             });
 
             document.getElementById('uploadForm')?.addEventListener('submit', async e => {

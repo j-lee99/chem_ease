@@ -2,8 +2,12 @@
 session_start();
 require_once '../partial/db_conn.php';
 
+
+$role = $_SESSION['role'] ?? '';
+$isAdmin = ($role === 'admin');
+$isSuperAdmin = ($role === 'super_admin');
 // If NOT logged in OR not admin → back to login
-if (!isset($_SESSION['user_id']) || $_SESSION['role'] !== 'admin') {
+if (!isset($_SESSION['user_id']) || !in_array(($_SESSION['role'] ?? ''), ['admin','super_admin'], true)) {
     header("Location: ../index.php");
     exit();
 }
@@ -260,12 +264,22 @@ if (!isset($_SESSION['user_id']) || $_SESSION['role'] !== 'admin') {
                     <span>Dashboard</span>
                 </a>
             </div>
+            <?php if ($isSuperAdmin): ?>
+            <div class="nav-item">
+                <a href="Generate_Reports.php" class="nav-link" data-section="reports">
+                    <i class="fas fa-file-alt"></i>
+                    <span>Generate Reports</span>
+                </a>
+            </div>
+            <?php endif; ?>
+            <?php if ($isSuperAdmin): ?>
             <div class="nav-item">
                 <a href="Users.php" class="nav-link" data-section="users">
-                    <i class="fas fa-users"></i>
+<i class="fas fa-users"></i>
                     <span>Users</span>
                 </a>
             </div>
+            <?php endif; ?>
             <div class="nav-item">
                 <a href="Learning_Material.php" class="nav-link" data-section="learning">
                     <i class="fas fa-book"></i>
@@ -278,12 +292,14 @@ if (!isset($_SESSION['user_id']) || $_SESSION['role'] !== 'admin') {
                     <span>Practice Exams</span>
                 </a>
             </div>
+            <?php if ($isSuperAdmin): ?>
             <div class="nav-item">
                 <a href="Discussion_Forums.php" class="nav-link" data-section="forums">
-                    <i class="fas fa-comments"></i>
+<i class="fas fa-comments"></i>
                     <span>Discussion Forums</span>
                 </a>
             </div>
+            <?php endif; ?>
         </nav>
     </div>
     <!-- Top Navbar -->

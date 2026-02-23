@@ -3,7 +3,7 @@ header('Content-Type: application/json');
 require_once 'db_conn.php';
 session_start();
 
-if (!isset($_SESSION['role']) || $_SESSION['role'] !== 'admin') {
+if (!isset($_SESSION['role']) || $_SESSION['role'] !== 'user') {
     echo json_encode(['status' => 'error', 'message' => 'Unauthorized']);
     exit;
 }
