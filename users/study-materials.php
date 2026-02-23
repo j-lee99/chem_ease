@@ -967,11 +967,9 @@ $cats = ['Analytical Chemistry', 'Organic Chemistry', 'Physical Chemistry', 'Ino
             let currentModalInstance = null;
             let currentModalElement = null;
 
-            // one-time bypass flags (used for the "Go back" button)
             let bypassPrereqOnce = false;
-            // -----------------------------
+            
             // Post-test prerequisite gating
-            // -----------------------------
             const POSTTEST_STATUS = new Map(); // key: "Category::ModuleCode" => { passed: bool, bestPct, passingPct }
 
             function parseModuleCodeFromMaterialTitle(title) {
@@ -1039,7 +1037,6 @@ $cats = ['Analytical Chemistry', 'Organic Chemistry', 'Physical Chemistry', 'Ino
                 const el = document.getElementById('prereqModalMessage');
                 if (el) el.textContent = getLockedMessage(reason);
 
-                // Hide Go back button if we don't know where to go
                 const backBtn = document.getElementById('goBackToPrevBtn');
                 if (backBtn) backBtn.style.display = prereqPrevMaterialId ? '' : 'none';
 
@@ -1047,7 +1044,6 @@ $cats = ['Analytical Chemistry', 'Organic Chemistry', 'Physical Chemistry', 'Ino
                 m.show();
             }
 
-            // Make "Go back" functional: open the previous module card
             const goBackBtn = document.getElementById('goBackToPrevBtn');
             if (goBackBtn) {
                 goBackBtn.addEventListener('click', () => {
@@ -1194,7 +1190,6 @@ $cats = ['Analytical Chemistry', 'Organic Chemistry', 'Physical Chemistry', 'Ino
                     return true;
                 } catch (err) {
                     console.error('Prereq check failed:', err);
-                    // fail-open to avoid blocking content due to a client-side error
                     return true;
                 }
             }

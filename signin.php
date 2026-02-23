@@ -365,7 +365,6 @@
                 setTimeout(() => p.remove(), 15000);
             }
             setInterval(createParticle, 2800);
-            // ── FORM SUBMISSION ────────────────────────────────────────
             const form = document.getElementById('loginForm');
             form.addEventListener('submit', async function(e) {
                 e.preventDefault();
