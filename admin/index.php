@@ -718,7 +718,6 @@ if (!isset($_SESSION['user_id']) || !in_array($role, ['admin', 'super_admin'], t
                 </div>
 
                 <div id="lbTop3" class="lb-top3-grid">
-                    <!-- populated by JS -->
                 </div>
 
                 <div class="lb-actions">
@@ -979,7 +978,6 @@ if (!isset($_SESSION['user_id']) || !in_array($role, ['admin', 'super_admin'], t
             return (a + b).toUpperCase();
         }
 
-        // IMPORTANT: fix /users/uploads/... -> /uploads/... issue
         function lbResolveProfilePicUrl(profilePic) {
             if (!profilePic) return null;
             let pic = String(profilePic).trim();
@@ -1151,7 +1149,6 @@ if (!isset($_SESSION['user_id']) || !in_array($role, ['admin', 'super_admin'], t
                 return;
             }
 
-            // If we can't determine, keep Next enabled and let the API response decide on next load
             next.disabled = false;
         }
 
@@ -1159,15 +1156,14 @@ if (!isset($_SESSION['user_id']) || !in_array($role, ['admin', 'super_admin'], t
         let lbModalSearch = "";
 
 
-        // Build a "global rank" map so search results keep their original rank numbers
-        let lbRankMap = null; // Map<idOrName, rank>
+         let lbRankMap = null; 
         let lbRankMapBuilt = false;
 
         async function lbBuildRankMap() {
             lbRankMap = new Map();
             lbRankMapBuilt = true;
 
-            const BIG_LIMIT = 1000; // ok for typical classroom-sized leaderboards
+            const BIG_LIMIT = 1000; 
             let page = 1;
 
             const firstPayload = await lbFetchUsers({
@@ -1178,7 +1174,6 @@ if (!isset($_SESSION['user_id']) || !in_array($role, ['admin', 'super_admin'], t
             const firstUsers = lbPickUsers(firstPayload);
             const lastPage = lbPickLastPage(firstPayload);
 
-            // If API already returns rank, trust it
             const addUsers = (users, offset) => {
                 users.forEach((u, i) => {
                     const id = lbPickId(u);
@@ -1210,7 +1205,6 @@ if (!isset($_SESSION['user_id']) || !in_array($role, ['admin', 'super_admin'], t
             try {
                 await lbBuildRankMap();
             } catch (e) {
-                // If building rank map fails, we can still work with computed ranks
                 lbRankMapBuilt = true;
                 lbRankMap = null;
             }
@@ -1220,7 +1214,6 @@ if (!isset($_SESSION['user_id']) || !in_array($role, ['admin', 'super_admin'], t
             const tbody = document.getElementById("lbTableBody");
             if (tbody) tbody.innerHTML = `<tr><td colspan="3" class="text-center text-muted py-4">Loading...</td></tr>`;
 
-            // Ensure we can keep global ranks when searching
             if (lbModalSearch) {
                 await lbEnsureRankMap();
             }
@@ -1235,7 +1228,6 @@ if (!isset($_SESSION['user_id']) || !in_array($role, ['admin', 'super_admin'], t
             const total = lbPickTotal(payload);
             const lastPage = lbPickLastPage(payload);
 
-            // If API doesn't send total/lastPage, infer lastPage when user count < limit
             const inferredLast = (lastPage == null && users.length < LB_LIMIT) ? lbModalPage : lastPage;
 
             lbRenderTable(users, {
@@ -1278,7 +1270,6 @@ if (!isset($_SESSION['user_id']) || !in_array($role, ['admin', 'super_admin'], t
                     lbLoadModalPage();
                 });
 
-                // cleanup like your destroyModal(), prevents stuck overlays
                 modalEl.addEventListener("hidden.bs.modal", () => {
                     document.querySelectorAll(".modal-backdrop").forEach(b => b.remove());
                     document.body.classList.remove("modal-open");

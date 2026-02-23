@@ -1456,20 +1456,49 @@ $cats = ['Analytical Chemistry', 'Organic Chemistry', 'Physical Chemistry', 'Ino
             return m ? m[1].trim() : null;
         }
 
+        function escapeRegExp(str) {
+            return String(str || '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        }
+
+        function norm(str) {
+            return String(str || '').trim().toLowerCase().replace(/\s+/g, ' ');
+        }
+
         async function isModuleProgressComplete(moduleCode, category) {
-            if (!moduleCode || !category) return false;
+            // NOTE: get_progress.php payload (per your sample) does NOT include `category`.
+            // So we must not require category matching, or post tests will stay locked forever.
+            if (!moduleCode) return false;
             try {
                 const resp = await fetch('../partial/get_progress.php');
                 const json = await resp.json();
                 const data = Array.isArray(json.data) ? json.data : [];
 
-                const target = data.find(m =>
-                    String(m.category || '') === String(category) &&
-                    new RegExp(`^\\s*Module\\s+${moduleCode}\\s*\\.`, 'i').test(String(m.title || ''))
-                );
+                // Match module titles more flexibly:
+                // - allow "Module A", "Module A.", "Module A:", "Module A - ...", etc.
+                // - do case-insensitive category compare (some DB values differ by casing/spacing)
+                // Match module titles flexibly (DB stores module as a single letter/code, e.g. "A").
+                // Accept any of these title formats (case-insensitive):
+                //   - "Module A ..."
+                //   - "A. ..." / "A - ..." / "A: ..." / "A ..."
+                // Also normalize category for safer comparison.
+                const code = String(moduleCode || '').trim();
+                const reStart = new RegExp(`^\\s*(?:Module\\s+)?${escapeRegExp(code)}\\b`, 'i');
+                const reAnywhere = new RegExp(`\\bModule\\s+${escapeRegExp(code)}\\b`, 'i');
 
-                if (!target || !Array.isArray(target.files) || target.files.length === 0) return false;
-                return target.files.every(f => Number(f.progress || 0) >= 100);
+                // 1) Find all module groups whose TITLE matches the requested module code.
+                const matchedByTitle = data.filter(m => {
+                    const title = String(m.title || '');
+                    return reStart.test(title) || reAnywhere.test(title);
+                });
+                if (matchedByTitle.length === 0) return false;
+
+                // 2) Consider module COMPLETE if ANY matching module group has ALL its files at 100%.
+                // This matters because you can have multiple "Module A" across different subjects/tracks.
+                return matchedByTitle.some(mod => {
+                    const files = Array.isArray(mod.files) ? mod.files : [];
+                    if (files.length === 0) return false;
+                    return files.every(f => Number(f.progress || 0) >= 100);
+                });
             } catch (e) {
                 console.error('Failed to check progress', e);
                 return false;

@@ -1126,7 +1126,6 @@ $cats = ['Analytical Chemistry', 'Organic Chemistry', 'Physical Chemistry', 'Ino
             }
 
             function markAsCompleted(fileId) {
-                // Kept for backward compatibility
                 saveProgressSmart(fileId, 100, {
                     force: true
                 });
@@ -1154,9 +1153,62 @@ $cats = ['Analytical Chemistry', 'Organic Chemistry', 'Physical Chemistry', 'Ino
                 document.body.style.paddingRight = '';
             }
 
-            document.querySelectorAll('.view-btn').forEach(btn => {
+            
+            function enforcePrerequisitesFromButton(btnEl) {
+                try {
+                    const card = btnEl.closest('.material-card');
+                    const section = btnEl.closest('.topic-section');
+                    const category = section?.dataset?.topic || null;
+
+                    if (!category || !card || !section) return true;
+
+                    const cards = Array.from(section.querySelectorAll('.material-card'));
+                    const idx = cards.indexOf(card);
+                    if (idx <= 0) return true;
+
+                    const prevCard = cards[idx - 1];
+                    const prevMid = prevCard?.dataset?.id || null;
+                    const prevTitle = prevCard?.querySelector('.card-title')?.textContent?.trim() || '';
+                    const prevModuleCode = parseModuleCodeFromMaterialTitle(prevTitle);
+
+                    if (prevMid) {
+                        const prevAvg = getMaterialAverageProgress(prevMid);
+                        if (prevAvg < 100) {
+                            showPrereqModal(prevMid, 'not_finished');
+                            return false;
+                        }
+                    }
+
+                    if (prevModuleCode) {
+                        const st = POSTTEST_STATUS.get(`${category}::${prevModuleCode}`);
+                        if (!st) {
+                            showPrereqModal(prevMid, 'not_taken');
+                            return false;
+                        }
+                        if (st.passed !== true) {
+                            showPrereqModal(prevMid, 'failed');
+                            return false;
+                        }
+                    }
+
+                    return true;
+                } catch (err) {
+                    console.error('Prereq check failed:', err);
+                    // fail-open to avoid blocking content due to a client-side error
+                    return true;
+                }
+            }
+
+document.querySelectorAll('.view-btn').forEach(btn => {
                 btn.addEventListener('click', e => {
                     e.stopPropagation();
+
+                    if (!bypassPrereqOnce) {
+                        if (!enforcePrerequisitesFromButton(btn)) return;
+                    } else {
+                        bypassPrereqOnce = false;
+                    }
+
                     const fid = btn.dataset.fid;
                     destroyModal();
                     openSingleFile(fid);
@@ -1168,50 +1220,8 @@ $cats = ['Analytical Chemistry', 'Organic Chemistry', 'Physical Chemistry', 'Ino
                     e.stopPropagation();
                     const mid = btn.dataset.id;
 
-                    // Prerequisite: if this is not the first module in the category,
-                    // require previous module to be finished (100%) and its POST TEST passed.
                     if (!bypassPrereqOnce) {
-                        try {
-                            const card = btn.closest('.material-card');
-                            const section = btn.closest('.topic-section');
-                            const category = section?.dataset?.topic || null;
-
-                            if (category && card && section) {
-                                const cards = Array.from(section.querySelectorAll('.material-card'));
-                                const idx = cards.indexOf(card);
-
-                                if (idx > 0) {
-                                    const prevCard = cards[idx - 1];
-                                    const prevMid = prevCard?.dataset?.id || null;
-                                    const prevTitle = prevCard?.querySelector('.card-title')?.textContent?.trim() || '';
-                                    const prevModuleCode = parseModuleCodeFromMaterialTitle(prevTitle);
-
-                                    // 1) Check previous module finished (100%)
-                                    if (prevMid) {
-                                        const prevAvg = getMaterialAverageProgress(prevMid);
-                                        if (prevAvg < 100) {
-                                            showPrereqModal(prevMid, 'not_finished');
-                                            return;
-                                        }
-                                    }
-
-                                    // 2) Check previous module post-test passed
-                                    if (prevModuleCode) {
-                                        const st = POSTTEST_STATUS.get(`${category}::${prevModuleCode}`);
-                                        if (!st) {
-                                            showPrereqModal(prevMid, 'not_taken');
-                                            return;
-                                        }
-                                        if (st.passed !== true) {
-                                            showPrereqModal(prevMid, 'failed');
-                                            return;
-                                        }
-                                    }
-                                }
-                            }
-                        } catch (err) {
-                            console.error('Prereq check failed:', err);
-                        }
+                        if (!enforcePrerequisitesFromButton(btn)) return;
                     } else {
                         bypassPrereqOnce = false;
                     }
@@ -1348,9 +1358,9 @@ $cats = ['Analytical Chemistry', 'Organic Chemistry', 'Physical Chemistry', 'Ino
             }
 
             function setupPdfTimeTracking(fileId, url) {
-                const MIN_SECONDS = 120;
-                const MAX_SECONDS = 2400;
-                const SECONDS_PER_MB = 300;
+                const MIN_SECONDS = 60;
+                const MAX_SECONDS = 1800;
+                const SECONDS_PER_MB = 60;
 
                 async function getPdfSizeBytes(u) {
                     try {
@@ -1395,7 +1405,7 @@ $cats = ['Analytical Chemistry', 'Organic Chemistry', 'Physical Chemistry', 'Ino
 
                 getPdfSizeBytes(url).then((bytes) => {
                     const secondsToComplete = estimateSeconds(bytes);
-                    startTimeBasedTracking(fileId, secondsToComplete);
+                    startTimeBasedTracking(fileId, secondsToComplete, { minDelta: 1 });
                 });
             }
 
@@ -1433,9 +1443,6 @@ $cats = ['Analytical Chemistry', 'Organic Chemistry', 'Physical Chemistry', 'Ino
                 }).catch(() => {});
             }
 
-            // =============================
-            // Dynamic progress tracking utils
-            // =============================
 
             const __progressState = {
                 lastSavedPct: new Map(),
@@ -1467,11 +1474,9 @@ $cats = ['Analytical Chemistry', 'Organic Chemistry', 'Physical Chemistry', 'Ino
             }
 
             function saveProgressSmart(fileId, pct, opts = {}) {
-                const {
-                    force = false
-                } = opts;
-                pct = Math.round(clampPct(pct));
+                const { force = false, minDelta = 2 } = opts;
 
+                pct = clampPct(pct); // keep as float for better sensitivity
                 const prev = __progressState.lastSavedPct.get(String(fileId)) ?? 0;
                 if (pct < prev) pct = prev;
 
@@ -1481,60 +1486,56 @@ $cats = ['Analytical Chemistry', 'Organic Chemistry', 'Physical Chemistry', 'Ino
                 // throttle: at most 1 request per 3 seconds (unless forced)
                 if (!force && now - lastAt < 3000) return;
 
-                // only save if it moved forward by at least 2% (unless forced or completed)
-                if (!force && pct !== 100 && (pct - prev) < 2) return;
+                // only save if it moved forward by at least `minDelta`% (unless forced or completed)
+                if (!force && pct !== 100 && (pct - prev) < minDelta) return;
 
                 __progressState.lastSavedPct.set(String(fileId), pct);
                 __progressState.lastSentAt.set(String(fileId), now);
 
-                saveProgress(fileId, pct);
+                // server expects a whole number percentage
+                saveProgress(fileId, Math.round(pct));
             }
+
 
             function updateProgressUiSmart(fileId, pct) {
                 pct = Math.round(clampPct(pct));
                 const prevUi = __progressState.lastUiPct.get(String(fileId)) ?? 0;
-                if (pct < prevUi) pct = prevUi; // no decrease in UI
+                if (pct < prevUi) pct = prevUi;
                 if (pct === prevUi) return;
 
                 __progressState.lastUiPct.set(String(fileId), pct);
                 updateProgressBar(fileId, pct);
             }
 
-            function startTimeBasedTracking(fileId, secondsToComplete = 600) {
+            function startTimeBasedTracking(fileId, secondsToComplete = 600, opts = {}) {
+                const { tickSeconds = 5, tickMs = 5000, minDelta = 2 } = opts;
+
                 let seconds = 0;
 
                 const intervalId = setInterval(() => {
-                    seconds += 5;
+                    seconds += tickSeconds;
 
                     const pct = (seconds / Math.max(1, secondsToComplete)) * 100;
                     updateProgressUiSmart(fileId, pct);
-                    saveProgressSmart(fileId, pct);
-                }, 5000);
+                    saveProgressSmart(fileId, pct, { minDelta });
+                }, tickMs);
 
+                // warm start so the user sees immediate feedback
                 const warmup = setTimeout(() => {
                     updateProgressUiSmart(fileId, 1);
-                    saveProgressSmart(fileId, 1, {
-                        force: true
-                    });
-                }, 1500);
+                    saveProgressSmart(fileId, 1, { force: true, minDelta });
+                }, 1200);
 
                 registerCleanup(() => {
                     clearInterval(intervalId);
                     clearTimeout(warmup);
-                    // this save on close
                     const pct = (seconds / Math.max(1, secondsToComplete)) * 100;
-                    saveProgressSmart(fileId, pct, {
-                        force: true
-                    });
+                    saveProgressSmart(fileId, pct, { force: true, minDelta });
                 });
             }
 
-            // -----------------------------
-            // YouTube tracking (IFrame API)
-            // -----------------------------
 
             let __ytApiPromise = null;
-
             function ensureYouTubeApi() {
                 if (window.YT && window.YT.Player) return Promise.resolve();
 
@@ -1555,7 +1556,6 @@ $cats = ['Analytical Chemistry', 'Organic Chemistry', 'Physical Chemistry', 'Ino
                         resolve();
                     };
 
-                    // will fallback: poll
                     const poll = setInterval(() => {
                         if (window.YT && window.YT.Player) {
                             clearInterval(poll);
@@ -1615,7 +1615,6 @@ $cats = ['Analytical Chemistry', 'Organic Chemistry', 'Physical Chemistry', 'Ino
                         player = new YT.Player(iframe.id, {
                             events: {
                                 onReady: () => {
-                                    // Poll current time/duration
                                     tick = setInterval(() => {
                                         try {
                                             const dur = player.getDuration?.() || 0;
