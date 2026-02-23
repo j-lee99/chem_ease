@@ -2,7 +2,10 @@
 session_start();
 require_once '../partial/db_conn.php';
 // If NOT logged in OR not admin → back to login
-if (!isset($_SESSION['user_id']) || $_SESSION['role'] !== 'admin') {
+$role = $_SESSION['role'] ?? '';
+$isAdmin = ($role === 'admin');
+$isSuperAdmin = ($role === 'super_admin');
+if (!isset($_SESSION['user_id']) || !in_array(($_SESSION['role'] ?? ''), ['admin','super_admin'], true)) {
     header("Location: ../index.php");
     exit();
 }
