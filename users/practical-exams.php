@@ -32,7 +32,6 @@ if (!$user) {
 $full_name     = $user['full_name'];
 $profile_image = $user['profile_image'] ?? '';
 
-// Optional: keep session fresh for other pages
 $_SESSION['full_name']     = $full_name;
 $_SESSION['profile_image'] = $profile_image;
 
@@ -985,7 +984,7 @@ $cats = ['Analytical Chemistry', 'Organic Chemistry', 'Physical Chemistry', 'Ino
     </div>
 
     
-    <!-- Gate / Locked Content Modal -->
+    <!-- Locked Content Modal -->
     <div class="modal fade" id="gateModal" tabindex="-1" aria-hidden="true">
         <div class="modal-dialog modal-dialog-centered">
             <div class="modal-content">
@@ -1343,7 +1342,7 @@ $cats = ['Analytical Chemistry', 'Organic Chemistry', 'Physical Chemistry', 'Ino
                 const safeTopic = escapeAttr(e.topic || 'Not specified');
                 const totalItems = e.total_questions || e.actual_questions;
 
-                // Percent helpers (we now display % instead of raw score like 30/30)
+                // Exam grade percent helpers
                 const toPercent = (score, total) => {
                     const s = Number(score);
                     const t = Number(total) || 0;
@@ -1433,7 +1432,7 @@ $cats = ['Analytical Chemistry', 'Organic Chemistry', 'Physical Chemistry', 'Ino
 
 
 
-        // ---- Gate / locked content helpers ----
+        // ---- locked content helpers ----
         let currentExamMeta = null; // { id, title, category, moduleCode }
         const examMetaMap = new Map(); // examId -> { title, category, moduleCode }
         let gateTarget = null;      // { category, moduleCode }
@@ -1473,27 +1472,16 @@ $cats = ['Analytical Chemistry', 'Organic Chemistry', 'Physical Chemistry', 'Ino
                 const json = await resp.json();
                 const data = Array.isArray(json.data) ? json.data : [];
 
-                // Match module titles more flexibly:
-                // - allow "Module A", "Module A.", "Module A:", "Module A - ...", etc.
-                // - do case-insensitive category compare (some DB values differ by casing/spacing)
-                // Match module titles flexibly (DB stores module as a single letter/code, e.g. "A").
-                // Accept any of these title formats (case-insensitive):
-                //   - "Module A ..."
-                //   - "A. ..." / "A - ..." / "A: ..." / "A ..."
-                // Also normalize category for safer comparison.
                 const code = String(moduleCode || '').trim();
                 const reStart = new RegExp(`^\\s*(?:Module\\s+)?${escapeRegExp(code)}\\b`, 'i');
                 const reAnywhere = new RegExp(`\\bModule\\s+${escapeRegExp(code)}\\b`, 'i');
 
-                // 1) Find all module groups whose TITLE matches the requested module code.
                 const matchedByTitle = data.filter(m => {
                     const title = String(m.title || '');
                     return reStart.test(title) || reAnywhere.test(title);
                 });
                 if (matchedByTitle.length === 0) return false;
 
-                // 2) Consider module COMPLETE if ANY matching module group has ALL its files at 100%.
-                // This matters because you can have multiple "Module A" across different subjects/tracks.
                 return matchedByTitle.some(mod => {
                     const files = Array.isArray(mod.files) ? mod.files : [];
                     if (files.length === 0) return false;
@@ -1511,12 +1499,10 @@ $cats = ['Analytical Chemistry', 'Organic Chemistry', 'Physical Chemistry', 'Ino
 
             if (!gateTarget || !gateTarget.category || !gateTarget.moduleCode) return;
 
-            // Let study-materials page auto-open the module (if it supports it)
             try {
                 sessionStorage.setItem('chemEase_open_module', JSON.stringify(gateTarget));
             } catch (e) {}
 
-            // Redirect to study materials (index router)
             window.location.href = 'index?page=study-materials';
         });
 

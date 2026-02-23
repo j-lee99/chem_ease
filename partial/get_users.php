@@ -66,7 +66,6 @@ if (isset($_GET['user_id'])) {
         'mobile',
         'phone',
         'birthday',
-        // 'gender',
         'created_at',
         'updated_at',
         'profile_image',
@@ -217,7 +216,7 @@ if (isset($_GET['user_id'])) {
 }
 
 // ------------------------
-// List endpoint (existing behavior): ?page=1&limit=10&search=foo
+// List endpoint: ?page=1&limit=10&search=foo
 // ------------------------
 $page = max(1, (int)($_GET['page'] ?? 1));
 $limit = (int)($_GET['limit'] ?? 10);
@@ -227,7 +226,6 @@ if ($limit > 50) $limit = 50;
 $offset = ($page - 1) * $limit;
 $search = trim($_GET['search'] ?? '');
 
-// Exclude soft-deleted users AND admins
 $where = "WHERE is_deleted = 0 AND role != 'admin'";
 $params = [];
 $types = '';

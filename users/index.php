@@ -123,7 +123,7 @@ $content_file = $page . '.php';
                         </a>
                     </li>
                 </ul>
-                <!-- Original profile dropdown (visible only on desktop/tablet when expanded) -->
+                
                 <div class="dropdown profile-dropdown d-none d-lg-flex">
                     <div class="profile-trigger" id="profileDropdown" data-bs-toggle="dropdown" aria-expanded="false" role="button">
                         <?php if ($profile_image && file_exists('../' . $profile_image)): ?>

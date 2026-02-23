@@ -664,7 +664,7 @@ $page = 'dashboard';
 
         const idx = pic.indexOf("/uploads/");
         if (idx !== -1) {
-            return `${window.location.origin}${pic.slice(idx)}`; // => http://chem_ease.test/uploads/...
+            return `${window.location.origin}${pic.slice(idx)}`; 
         }
 
         if (pic.startsWith("/")) {
@@ -1069,7 +1069,7 @@ $page = 'dashboard';
         }
 
         modalEl.addEventListener('hidden.bs.modal', () => {
-            // Safety cleanup: sometimes backdrops stick if a JS error occurs while loading leaderboard
+            // For Safety cleanup: sometimes backdrops stick if a JS error occurs while loading leaderboard
             document.querySelectorAll('.modal-backdrop').forEach(b => b.remove());
             document.body.classList.remove('modal-open');
             document.body.style.removeProperty('padding-right');

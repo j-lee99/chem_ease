@@ -62,7 +62,6 @@ if (!isset($_SESSION['user_id']) || !in_array(($_SESSION['role'] ?? ''), ['admin
             --dark: #343a40;
         }
 
-        /* Make each category section span the full width of your existing .materials-grid */
         .category-section {
             grid-column: 1 / -1;
             margin-bottom: 16px;
@@ -82,7 +81,6 @@ if (!isset($_SESSION['user_id']) || !in_array(($_SESSION['role'] ?? ''), ['admin
             background: #f8fafc;
         }
 
-        /* Inner grid that holds the SAME card layout (grid cards like before) */
         .category-grid {
             display: grid;
             grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
@@ -397,7 +395,7 @@ if (!isset($_SESSION['user_id']) || !in_array(($_SESSION['role'] ?? ''), ['admin
         </div>
     </div>
 
-    <!-- Add Modal with Clickable PDF Preview -->
+    <!-- Modal with Clickable PDF Preview -->
     <div class="modal fade" id="addModal" tabindex="-1" data-bs-backdrop="static" data-bs-keyboard="false">
         <div class="modal-dialog modal-lg">
             <div class="modal-content">
@@ -432,7 +430,7 @@ if (!isset($_SESSION['user_id']) || !in_array(($_SESSION['role'] ?? ''), ['admin
                         <div class="mb-3">
                             <input type="file" name="pdfs[]" accept=".pdf" class="form-control" multiple id="pdfInput">
                         </div>
-                        <!-- PDF Preview Area (now clickable) -->
+                        <!-- PDF Preview Area -->
                         <div id="pdfPreview" class="upload-preview-container" style="display:none;"></div>
 
                         <h6>YouTube Videos (one per line)</h6>

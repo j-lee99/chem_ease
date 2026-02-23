@@ -1,7 +1,7 @@
 <?php
 header('Content-Type: application/json');
 
-// Allow CORS if needed (optional in production – restrict origin later)
+// Allow CORS if needed
 header('Access-Control-Allow-Origin: *');
 header('Access-Control-Allow-Methods: POST');
 header('Access-Control-Allow-Headers: Content-Type');

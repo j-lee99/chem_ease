@@ -29,7 +29,6 @@ $examId = intval($_GET['exam_id']);
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
 
     <style>
-        /* --- Exam top bar --- */
         .exam-topbar {
             position: sticky;
             top: 0;
@@ -71,7 +70,6 @@ $examId = intval($_GET['exam_id']);
             object-fit: contain;
         }
 
-        /* --- Navbar (copied-minimal) --- */
         .navbar {
             box-shadow: 0 2px 10px rgba(0, 0, 0, .06);
         }
@@ -178,7 +176,6 @@ $examId = intval($_GET['exam_id']);
 
         #reviewBtn {
             background: #3b82f6;
-            /* visible blue for review */
             color: white;
         }
 
@@ -263,7 +260,7 @@ $examId = intval($_GET['exam_id']);
             color: #6b7280;
         }
 
-        /* Results Modal (enhanced like screenshot) */
+        /* For Results Modal */
         .results-modal {
             border: 0;
             overflow: hidden;
@@ -577,9 +574,7 @@ $examId = intval($_GET['exam_id']);
         let examEnded = false;
         let isGoingToReview = false;
 
-        // =======================
         // START EXAM
-        // =======================
         function startExam(examId) {
             fetch(`../partial/exam_start.php?exam_id=${examId}`)
                 .then(r => r.json())
@@ -622,9 +617,7 @@ $examId = intval($_GET['exam_id']);
                 });
         }
 
-        // =======================
         // SHOW QUESTION
-        // =======================
         function showQuestion() {
             const q = examData.questions[currentQ];
             const container = document.getElementById('questionContainer');
@@ -664,9 +657,7 @@ $examId = intval($_GET['exam_id']);
             });
         }
 
-        // =======================
         // NAVIGATION
-        // =======================
         function nextQuestion() {
             if (currentQ < examData.questions.length - 1) {
                 currentQ++;
@@ -699,9 +690,7 @@ $examId = intval($_GET['exam_id']);
         }
 
 
-        // =======================
         // EXIT
-        // =======================
         function showExitModal() {
             const modal = new bootstrap.Modal(document.getElementById('exitExamModal'));
             modal.show();
@@ -711,9 +700,7 @@ $examId = intval($_GET['exam_id']);
             window.location.href = 'index.php?page=practical-exams';
         }
 
-        // =======================
         // REVIEW MODAL
-        // =======================
         function showReviewModal() {
             isGoingToReview = true;
             let reviewHtml = '';
@@ -752,9 +739,7 @@ $examId = intval($_GET['exam_id']);
             updateButtons();
         }
 
-        // =======================
         // TIMER
-        // =======================
         function startTimer(seconds) {
             let remaining = seconds;
 
@@ -775,14 +760,11 @@ $examId = intval($_GET['exam_id']);
         }
 
         function timeUp() {
-            // Do NOT set examEnded here; finalSubmit() will bail out if examEnded is true.
             const modal = new bootstrap.Modal(document.getElementById('timeUpModal'));
             modal.show();
         }
 
-        // =======================
         // SUBMISSION
-        // =======================
         function confirmSubmit() {
             if (confirm("Submit your exam now?")) finalSubmit();
         }
@@ -818,21 +800,17 @@ $examId = intval($_GET['exam_id']);
                 });
         }
 
-        // =======================
         // SHOW RESULTS
-        // =======================
         function showResults(data, timeTaken) {
             const passed = data.score >= data.passing_score;
             const statusText = passed ? 'Passed' : 'Failed';
             const passingItems = Math.ceil((data.passing_score / 100) * data.total);
 
-            // Circle content like screenshot
             document.getElementById('finalScore').innerHTML = `
                 <div>${data.score}%</div>
                 <div class="score-sub">${statusText}</div>
             `;
 
-            // Optional passing line under the circle
             const existingPassingLine = document.getElementById('passingLine');
             if (existingPassingLine) existingPassingLine.remove();
 
@@ -860,7 +838,7 @@ $examId = intval($_GET['exam_id']);
             document.getElementById('statUnanswered').textContent = Math.max(0, data.total - answered);
             document.getElementById('statTime').textContent = timeTaken;
 
-            // Detailed Results (styled)
+            // Detailed Results
             let detailsHtml = `
                 <div class="details-title">Detailed Results</div>
                 <div class="details-scroll">
@@ -914,9 +892,7 @@ $examId = intval($_GET['exam_id']);
             showModal('resultsModal');
         }
 
-        // =======================
         // UTILITIES
-        // =======================
         function shuffleArray(arr) {
             return [...arr].sort(() => Math.random() - 0.5);
         }
@@ -928,9 +904,7 @@ $examId = intval($_GET['exam_id']);
             modal.show();
         }
 
-        // =======================
         // AUTO START
-        // =======================
         document.addEventListener("DOMContentLoaded", () => {
             startExam(<?= $examId ?>);
         });
