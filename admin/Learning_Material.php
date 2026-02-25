@@ -5,7 +5,7 @@ require_once '../partial/db_conn.php';
 $role = $_SESSION['role'] ?? '';
 $isAdmin = ($role === 'admin');
 $isSuperAdmin = ($role === 'super_admin');
-if (!isset($_SESSION['user_id']) || !in_array(($_SESSION['role'] ?? ''), ['admin','super_admin'], true)) {
+if (!isset($_SESSION['user_id']) || !in_array(($_SESSION['role'] ?? ''), ['admin', 'super_admin'], true)) {
     header("Location: ../index.php");
     exit();
 }
@@ -318,14 +318,11 @@ if (!isset($_SESSION['user_id']) || !in_array(($_SESSION['role'] ?? ''), ['admin
         </div>
         <nav class="sidebar-nav">
             <div class="nav-item"><a href="index.php" class="nav-link"><i class="fas fa-home"></i><span>Dashboard</span></a></div>
-
-            <?php if ($isSuperAdmin): ?>
-                <div class="nav-item"><a href="Users.php" class="nav-link"><i class="fas fa-users"></i><span>Users</span></a></div>
+            <div class="nav-item"><a href="Users.php" class="nav-link"><i class="fas fa-users"></i><span>Users</span></a></div>
+            <?php if ($isAdmin): ?>
+                <div class="nav-item"><a href="Learning_Material.php" class="nav-link active"><i class="fas fa-book"></i><span>Learning Materials</span></a></div>
+                <div class="nav-item"><a href="Practice_Exams.php" class="nav-link"><i class="fas fa-clipboard-list"></i><span>Practice Exams</span></a></div>
             <?php endif; ?>
-
-            <div class="nav-item"><a href="Learning_Material.php" class="nav-link active"><i class="fas fa-book"></i><span>Learning Materials</span></a></div>
-            <div class="nav-item"><a href="Practice_Exams.php" class="nav-link"><i class="fas fa-clipboard-list"></i><span>Practice Exams</span></a></div>
-
             <?php if ($isSuperAdmin): ?>
                 <div class="nav-item"><a href="Discussion_Forums.php" class="nav-link"><i class="fas fa-comments"></i><span>Discussion Forums</span></a></div>
                 <div class="nav-item"><a href="Generate_Reports.php" class="nav-link"><i class="fas fa-file-lines"></i><span>Generate Reports</span></a></div>
@@ -451,7 +448,8 @@ if (!isset($_SESSION['user_id']) || !in_array(($_SESSION['role'] ?? ''), ['admin
     </div>
 
     <script src="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.0/js/bootstrap.bundle.min.js"></script>
-    <script>        document.addEventListener('DOMContentLoaded', function() {
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
             function toggleSidebar() {
                 document.querySelectorAll('.sidebar, .top-navbar, .main-content').forEach(el => el.classList.toggle('collapsed'));
                 const i = document.querySelector('.collapse-btn i');
@@ -468,7 +466,10 @@ if (!isset($_SESSION['user_id']) || !in_array(($_SESSION['role'] ?? ''), ['admin
                 if (isLoading) return;
                 isLoading = true;
                 const grid = document.getElementById('materialsGrid');
-                if (!grid) { isLoading = false; return; }
+                if (!grid) {
+                    isLoading = false;
+                    return;
+                }
                 if (!append) {
                     grid.innerHTML = '<div class="text-center py-5"><div class="spinner-border text-primary"></div><p class="mt-3 text-muted">Loading...</p></div>';
                 }
@@ -654,7 +655,7 @@ if (!isset($_SESSION['user_id']) || !in_array(($_SESSION['role'] ?? ''), ['admin
                     pdfPreview.appendChild(item);
 
                     item.addEventListener('click', (e) => {
-                        if (e.target.closest('.remove-preview-btn')) return; 
+                        if (e.target.closest('.remove-preview-btn')) return;
                         const url = URL.createObjectURL(file);
                         window.open(url, '_blank');
 

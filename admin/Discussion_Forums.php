@@ -5,17 +5,28 @@ require_once '../partial/db_conn.php';
 $role = $_SESSION['role'] ?? '';
 $isAdmin = ($role === 'admin');
 $isSuperAdmin = ($role === 'super_admin');
-if (!isset($_SESSION['user_id']) || !in_array(($_SESSION['role'] ?? ''), ['admin','super_admin'], true)) {
+if (!isset($_SESSION['user_id']) || !in_array(($_SESSION['role'] ?? ''), ['admin', 'super_admin'], true)) {
     header("Location: ../index.php");
     exit();
 }
 ?>
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>ChemEase Admin - Discussion Forums</title>
+    <title>
+        <?php
+        if ($isSuperAdmin) {
+            echo "ChemEase Super Admin Panel - Discussion Forum";
+        } elseif ($isAdmin) {
+            echo "ChemEase Admin Panel - Discussion Forum";
+        } else {
+            echo "ChemEase - Discussion Forum";
+        }
+        ?>
+    </title>
     <link href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.0/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
     <link rel="stylesheet" href="forum.css">
@@ -56,7 +67,9 @@ if (!isset($_SESSION['user_id']) || !in_array(($_SESSION['role'] ?? ''), ['admin
             height: 50px;
             flex-shrink: 0;
         }
-        .post-avatar, .post-avatar-img {
+
+        .post-avatar,
+        .post-avatar-img {
             width: 50px;
             height: 50px;
             border-radius: 50%;
@@ -68,11 +81,13 @@ if (!isset($_SESSION['user_id']) || !in_array(($_SESSION['role'] ?? ''), ['admin
             font-size: 1.1rem;
             background-color: #6c757d;
         }
+
         .post-avatar-img {
             object-fit: cover;
             border: 3px solid #fff;
-            box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
         }
+
         .reply-avatar {
             width: 45px;
             height: 45px;
@@ -80,6 +95,7 @@ if (!isset($_SESSION['user_id']) || !in_array(($_SESSION['role'] ?? ''), ['admin
             object-fit: cover;
             border: 2px solid #e9ecef;
         }
+
         .reply-avatar.initials {
             background-color: #17a2b8;
             color: white;
@@ -91,6 +107,7 @@ if (!isset($_SESSION['user_id']) || !in_array(($_SESSION['role'] ?? ''), ['admin
         }
     </style>
 </head>
+
 <body>
     <!-- Sidebar -->
     <div class="sidebar">
@@ -104,15 +121,28 @@ if (!isset($_SESSION['user_id']) || !in_array(($_SESSION['role'] ?? ''), ['admin
         <nav class="sidebar-nav">
             <div class="nav-item"><a href="index.php" class="nav-link"><i class="fas fa-home"></i><span>Dashboard</span></a></div>
             <div class="nav-item"><a href="Users.php" class="nav-link"><i class="fas fa-users"></i><span>Users</span></a></div>
-            <div class="nav-item"><a href="Learning_Material.php" class="nav-link"><i class="fas fa-book"></i><span>Learning Materials</span></a></div>
-            <div class="nav-item"><a href="Practice_Exams.php" class="nav-link"><i class="fas fa-clipboard-list"></i><span>Practice Exams</span></a></div>
-            <div class="nav-item"><a href="Discussion_Forums.php" class="nav-link active"><i class="fas fa-comments"></i><span>Discussion Forums</span></a></div>
+            <?php if ($isAdmin): ?>
+                <div class="nav-item"><a href="Learning_Material.php" class="nav-link"><i class="fas fa-book"></i><span>Learning Materials</span></a></div>
+                <div class="nav-item"><a href="Practice_Exams.php" class="nav-link"><i class="fas fa-clipboard-list"></i><span>Practice Exams</span></a></div>
+            <?php endif; ?>
+            <?php if ($isSuperAdmin): ?>
+                <div class="nav-item"><a href="Discussion_Forums.php" class="nav-link active"><i class="fas fa-comments"></i><span>Discussion Forums</span></a></div>
+                <div class="nav-item"><a href="Generate_Reports.php" class="nav-link"><i class="fas fa-file-alt"></i><span>Generate Reports</span></a></div>
+            <?php endif; ?>
         </nav>
     </div>
 
     <!-- Top Navbar -->
     <div class="top-navbar">
-        <h4>ADMIN PANEL</h4>
+        <?php
+        if ($isAdmin) {
+            echo "<h4>ADMIN PANEL</h4>";
+        } elseif ($isSuperAdmin) {
+            echo "<h4>SUPER ADMIN PANEL</h4>";
+        } else {
+            echo "<h4>ADMIN PANEL</h4>";
+        }
+        ?>
         <div class="navbar-actions">
             <a href="https://chemease.site/" class="logout-btn"><i class="fas fa-sign-out-alt"></i> LOGOUT</a>
         </div>
@@ -133,21 +163,21 @@ if (!isset($_SESSION['user_id']) || !in_array(($_SESSION['role'] ?? ''), ['admin
                     <div class="stat-card">
                         <div class="stat-info">
                             <div class="stat-label">Total Posts</div>
-                            <div class="stat-number"><?=$total?></div>
+                            <div class="stat-number"><?= $total ?></div>
                         </div>
                         <div class="stat-icon blue"><i class="fas fa-comments"></i></div>
                     </div>
                     <div class="stat-card">
                         <div class="stat-info">
                             <div class="stat-label">Active Discussions</div>
-                            <div class="stat-number"><?=$active?></div>
+                            <div class="stat-number"><?= $active ?></div>
                         </div>
                         <div class="stat-icon green"><i class="fas fa-users"></i></div>
                     </div>
                     <div class="stat-card">
                         <div class="stat-info">
                             <div class="stat-label">Flagged Posts</div>
-                            <div class="stat-number"><?=$flagged?></div>
+                            <div class="stat-number"><?= $flagged ?></div>
                         </div>
                         <div class="stat-icon red"><i class="fas fa-flag"></i></div>
                     </div>
@@ -208,7 +238,7 @@ if (!isset($_SESSION['user_id']) || !in_array(($_SESSION['role'] ?? ''), ['admin
         let adminOffset = 0;
         let adminCurrentFilter = 'all';
         let adminSearchTerm = '';
-       
+
         // Generate avatar: image or initials
         function generateAvatar(fullName, profileImage) {
             const initials = fullName.split(' ').map(n => n[0]?.toUpperCase() || '').join('').substring(0, 2) || 'AD';
@@ -217,7 +247,7 @@ if (!isset($_SESSION['user_id']) || !in_array(($_SESSION['role'] ?? ''), ['admin
             }
             return `<div class="post-avatar">${initials}</div>`;
         }
-       
+
         function generateReplyAvatar(fullName, profileImage) {
             const initials = fullName.split(' ').map(n => n[0]?.toUpperCase() || '').join('').substring(0, 2) || 'U';
             if (profileImage && profileImage.trim() !== '') {
@@ -225,10 +255,10 @@ if (!isset($_SESSION['user_id']) || !in_array(($_SESSION['role'] ?? ''), ['admin
             }
             return `<div class="reply-avatar initials">${initials}</div>`;
         }
-       
+
         function loadAdminThreads(replace = true) {
             let url = `../partial/forum_handler.php?action=get_threads_admin&filter=${adminCurrentFilter}&search=${adminSearchTerm}&offset=${adminOffset}&limit=15`;
-           
+
             fetch(url)
                 .then(r => r.json())
                 .then(data => {
@@ -237,20 +267,20 @@ if (!isset($_SESSION['user_id']) || !in_array(($_SESSION['role'] ?? ''), ['admin
                         container.innerHTML = '';
                         adminOffset = 0;
                     }
-                   
+
                     if (data.length === 0 && replace) {
                         container.innerHTML = '<div class="text-center py-5"><p class="text-muted">No discussions found.</p></div>';
                         document.getElementById('loadMoreBtn').style.display = 'none';
                         return;
                     }
-                   
+
                     let renderedCount = 0;
-                   
+
                     data.forEach(thread => {
                         const flagged = thread.is_flagged ? `<span class="flagged-tag">Flagged</span>` : '';
                         const closed = thread.is_closed ? `<span class="badge bg-secondary ms-2">Closed</span>` : '';
                         const catClass = (thread.category || '').replace(/ /g, '').toLowerCase();
-                       
+
                         container.innerHTML += `
                         <div class="forum-post">
                             <div class="avatar-wrapper">
@@ -275,17 +305,17 @@ if (!isset($_SESSION['user_id']) || !in_array(($_SESSION['role'] ?? ''), ['admin
                                 </button>
                             </div>
                         </div>`;
-                       
+
                         renderedCount++;
                     });
-                   
+
                     adminOffset += data.length;
-                   
+
                     // Show/hide load more button
                     document.getElementById('loadMoreBtn').style.display = data.length >= 15 ? 'block' : 'none';
                 });
         }
-       
+
         function viewThread(id) {
             fetch(`../partial/forum_handler.php?action=view_thread&id=${id}`)
                 .then(r => r.json())
@@ -306,7 +336,7 @@ if (!isset($_SESSION['user_id']) || !in_array(($_SESSION['role'] ?? ''), ['admin
                         </div>
                         <hr>
                         <h5>Replies (${data.replies.length})</h5>`;
-                   
+
                     data.replies.forEach(r => {
                         html += `
                         <div class="d-flex gap-3 py-3 border-bottom">
@@ -318,13 +348,13 @@ if (!isset($_SESSION['user_id']) || !in_array(($_SESSION['role'] ?? ''), ['admin
                             </div>
                         </div>`;
                     });
-                   
+
                     html += `</div>`;
                     document.getElementById('threadViewer').innerHTML = html;
                     new bootstrap.Modal(document.getElementById('viewModal')).show();
                 });
         }
-       
+
         // Tabs
         document.querySelectorAll('.forum-tab').forEach(tab => {
             tab.addEventListener('click', () => {
@@ -335,19 +365,19 @@ if (!isset($_SESSION['user_id']) || !in_array(($_SESSION['role'] ?? ''), ['admin
                 loadAdminThreads();
             });
         });
-       
+
         // Search
         document.getElementById('adminSearch').addEventListener('input', e => {
             adminSearchTerm = e.target.value;
             adminOffset = 0;
             loadAdminThreads();
         });
-       
+
         // Load More
         document.getElementById('loadMoreBtn').addEventListener('click', () => {
             loadAdminThreads(false);
         });
-       
+
         // Flag/Unflag
         document.getElementById('adminForumPosts').addEventListener('click', e => {
             const btn = e.target.closest('.flag-btn');
@@ -357,7 +387,9 @@ if (!isset($_SESSION['user_id']) || !in_array(($_SESSION['role'] ?? ''), ['admin
                 const flag = btn.dataset.flag;
                 fetch('../partial/forum_handler.php', {
                     method: 'POST',
-                    headers: {'Content-Type': 'application/x-www-form-urlencoded'},
+                    headers: {
+                        'Content-Type': 'application/x-www-form-urlencoded'
+                    },
                     body: `action=flag_thread&thread_id=${id}&flag=${flag}`
                 }).then(() => {
                     adminOffset = 0;
@@ -365,7 +397,7 @@ if (!isset($_SESSION['user_id']) || !in_array(($_SESSION['role'] ?? ''), ['admin
                 });
             }
         });
-       
+
         // Sidebar collapse
         document.querySelector('.collapse-btn').addEventListener('click', function() {
             document.querySelector('.sidebar').classList.toggle('collapsed');
@@ -375,9 +407,10 @@ if (!isset($_SESSION['user_id']) || !in_array(($_SESSION['role'] ?? ''), ['admin
             icon.classList.toggle('fa-chevron-left');
             icon.classList.toggle('fa-chevron-right');
         });
-       
+
         // Load on start
         loadAdminThreads();
     </script>
 </body>
+
 </html>
