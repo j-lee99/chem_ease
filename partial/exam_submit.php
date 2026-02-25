@@ -75,7 +75,7 @@ try {
         "total_answered = ?"
     ];
     $types = "iii";
-    $values = [$score, $totalCorrect, $totalAnswered];
+    $values = [$transmutedGrade, $totalCorrect, $totalAnswered];
 
     if (column_exists($conn, 'user_exam_attempts', 'raw_percent')) {
         $setParts[] = "raw_percent = ?";
@@ -102,6 +102,7 @@ try {
         'success' => true,
         'score' => $score,
         'correct' => $totalCorrect,
+        'total_answered' => $totalAnswered,
         'total' => $totalQ,
         'passing_score' => $passingScore,
         'raw_percent' => $rawPercent,

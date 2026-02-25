@@ -19,7 +19,17 @@ if (!isset($_SESSION['user_id']) || !in_array($role, ['admin', 'super_admin'], t
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>ChemEase Admin Panel</title>
+    <title>
+        <?php
+        if ($isSuperAdmin) {
+            echo "ChemEase Super Admin Panel";
+        } elseif ($isAdmin) {
+            echo "ChemEase Admin Panel";
+        } else {
+            echo "ChemEase";
+        }
+        ?>
+    </title>
     <link href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.0/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
     <!-- Favicon -->
@@ -550,26 +560,28 @@ if (!isset($_SESSION['user_id']) || !in_array($role, ['admin', 'super_admin'], t
                     <span>Dashboard</span>
                 </a>
             </div>
-            <?php if ($isSuperAdmin): ?>
+            <div class="nav-item">
+                <a href="Users.php" class="nav-link">
+                    <i class="fas fa-users"></i>
+                    <span>Users</span>
+                </a>
+            </div>
+
+            <?php if ($isAdmin): ?>
                 <div class="nav-item">
-                    <a href="Users.php" class="nav-link">
-                        <i class="fas fa-users"></i>
-                        <span>Users</span>
+                    <a href="Learning_Material.php" class="nav-link">
+                        <i class="fas fa-book"></i>
+                        <span>Learning Materials</span>
+                    </a>
+                </div>
+                <div class="nav-item">
+                    <a href="Practice_Exams.php" class="nav-link">
+                        <i class="fas fa-clipboard-list"></i>
+                        <span>Practice Exams</span>
                     </a>
                 </div>
             <?php endif; ?>
-            <div class="nav-item">
-                <a href="Learning_Material.php" class="nav-link">
-                    <i class="fas fa-book"></i>
-                    <span>Learning Materials</span>
-                </a>
-            </div>
-            <div class="nav-item">
-                <a href="Practice_Exams.php" class="nav-link">
-                    <i class="fas fa-clipboard-list"></i>
-                    <span>Practice Exams</span>
-                </a>
-            </div>
+
             <?php if ($isSuperAdmin): ?>
                 <div class="nav-item">
                     <a href="Discussion_Forums.php" class="nav-link">
@@ -591,7 +603,15 @@ if (!isset($_SESSION['user_id']) || !in_array($role, ['admin', 'super_admin'], t
 
     <!-- Top Navigation -->
     <div class="top-navbar">
-        <h4>ADMIN PANEL</h4>
+        <?php
+        if ($isAdmin) {
+            echo "<h4>ADMIN PANEL</h4>";
+        } elseif ($isSuperAdmin) {
+            echo "<h4>SUPER ADMIN PANEL</h4>";
+        } else {
+            echo "<h4>ADMIN PANEL</h4>";
+        }
+        ?>
         <div class="navbar-actions">
             <a href="https://chemease.site/" class="logout-btn">
                 <i class="fas fa-sign-out-alt"></i>
@@ -615,7 +635,7 @@ if (!isset($_SESSION['user_id']) || !in_array($role, ['admin', 'super_admin'], t
             <div class="stats-grid">
                 <?php
                 // Total Users
-                $total_users = $conn->query("SELECT COUNT(*) FROM users")->fetch_row()[0] ?? 0;
+                $total_users = $conn->query("SELECT COUNT(*) FROM users WHERE role='user'")->fetch_row()[0] ?? 0;
 
                 // Total Exams
                 $total_exams = $conn->query("SELECT COUNT(*) FROM exams")->fetch_row()[0] ?? 0;
@@ -1156,14 +1176,14 @@ if (!isset($_SESSION['user_id']) || !in_array($role, ['admin', 'super_admin'], t
         let lbModalSearch = "";
 
 
-         let lbRankMap = null; 
+        let lbRankMap = null;
         let lbRankMapBuilt = false;
 
         async function lbBuildRankMap() {
             lbRankMap = new Map();
             lbRankMapBuilt = true;
 
-            const BIG_LIMIT = 1000; 
+            const BIG_LIMIT = 1000;
             let page = 1;
 
             const firstPayload = await lbFetchUsers({

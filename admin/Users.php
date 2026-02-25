@@ -2,8 +2,11 @@
 session_start();
 require_once '../partial/db_conn.php';
 
+$role = $_SESSION['role'] ?? '';
+$isAdmin = ($role === 'admin');
+$isSuperAdmin = ($role === 'super_admin');
 // If NOT logged in OR not admin → back to login
-if (!isset($_SESSION['user_id']) || $_SESSION['role'] !== 'admin') {
+if (!isset($_SESSION['user_id']) || !in_array(($_SESSION['role'] ?? ''), ['admin', 'super_admin'], true)) {
     header("Location: ../index.php");
     exit();
 }
@@ -14,7 +17,17 @@ if (!isset($_SESSION['user_id']) || $_SESSION['role'] !== 'admin') {
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>ChemEase Admin Panel - Users</title>
+    <title>
+        <?php
+        if ($isSuperAdmin) {
+            echo "ChemEase Super Admin Panel - Users";
+        } elseif ($isAdmin) {
+            echo "ChemEase Admin Panel - Users";
+        } else {
+            echo "ChemEase - Users";
+        }
+        ?>
+    </title>
     <link href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.0/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
     <!-- Favicon -->
@@ -367,14 +380,28 @@ if (!isset($_SESSION['user_id']) || $_SESSION['role'] !== 'admin') {
         <nav class="sidebar-nav">
             <div class="nav-item"><a href="index.php" class="nav-link"><i class="fas fa-home"></i><span>Dashboard</span></a></div>
             <div class="nav-item"><a href="Users.php" class="nav-link active"><i class="fas fa-users"></i><span>Users</span></a></div>
-            <div class="nav-item"><a href="Learning_Material.php" class="nav-link"><i class="fas fa-book"></i><span>Learning Materials</span></a></div>
-            <div class="nav-item"><a href="Practice_Exams.php" class="nav-link"><i class="fas fa-clipboard-list"></i><span>Practice Exams</span></a></div>
-            <div class="nav-item"><a href="Discussion_Forums.php" class="nav-link"><i class="fas fa-comments"></i><span>Discussion Forums</span></a></div>
+            <?php if (!$isSuperAdmin): ?>
+                <div class="nav-item"><a href="Learning_Material.php" class="nav-link"><i class="fas fa-book"></i><span>Learning Materials</span></a></div>
+                <div class="nav-item"><a href="Practice_Exams.php" class="nav-link"><i class="fas fa-clipboard-list"></i><span>Practice Exams</span></a></div>
+            <?php endif; ?>
+
+            <?php if ($isSuperAdmin): ?>
+                <div class="nav-item"><a href="Discussion_Forums.php" class="nav-link"><i class="fas fa-comments"></i><span>Discussion Forums</span></a></div>
+                <div class="nav-item"><a href="Generate_Reports.php" class="nav-link"><i class="fas fa-file-alt"></i><span>Generate Reports</span></a></div>
+            <?php endif; ?>
         </nav>
     </div>
     <!-- Top Navbar -->
     <div class="top-navbar">
-        <h4>ADMIN PANEL</h4>
+        <?php
+        if ($isAdmin) {
+            echo "<h4>ADMIN PANEL</h4>";
+        } elseif ($isSuperAdmin) {
+            echo "<h4>SUPER ADMIN PANEL</h4>";
+        } else {
+            echo "<h4>ADMIN PANEL</h4>";
+        }
+        ?>
         <div class="navbar-actions">
             <a href="https://chemease.site/" class="logout-btn"><i class="fas fa-sign-out-alt"></i> LOGOUT</a>
         </div>

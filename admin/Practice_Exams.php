@@ -7,7 +7,7 @@ $role = $_SESSION['role'] ?? '';
 $isAdmin = ($role === 'admin');
 $isSuperAdmin = ($role === 'super_admin');
 // If NOT logged in OR not admin → back to login
-if (!isset($_SESSION['user_id']) || !in_array(($_SESSION['role'] ?? ''), ['admin','super_admin'], true)) {
+if (!isset($_SESSION['user_id']) || !in_array(($_SESSION['role'] ?? ''), ['admin', 'super_admin'], true)) {
     header("Location: ../index.php");
     exit();
 }
@@ -19,7 +19,17 @@ if (!isset($_SESSION['user_id']) || !in_array(($_SESSION['role'] ?? ''), ['admin
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>ChemEase Admin Panel - Practice Exams</title>
+    <title>
+        <?php
+        if ($isSuperAdmin) {
+            echo "ChemEase Super Admin Panel - Users";
+        } elseif ($isAdmin) {
+            echo "ChemEase Admin Panel - Users";
+        } else {
+            echo "ChemEase - Users";
+        }
+        ?>
+    </title>
     <link href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.0/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
     <link rel="stylesheet" href="pe.css">
@@ -264,41 +274,41 @@ if (!isset($_SESSION['user_id']) || !in_array(($_SESSION['role'] ?? ''), ['admin
                     <span>Dashboard</span>
                 </a>
             </div>
-            <?php if ($isSuperAdmin): ?>
-            <div class="nav-item">
-                <a href="Generate_Reports.php" class="nav-link" data-section="reports">
-                    <i class="fas fa-file-alt"></i>
-                    <span>Generate Reports</span>
-                </a>
-            </div>
-            <?php endif; ?>
-            <?php if ($isSuperAdmin): ?>
             <div class="nav-item">
                 <a href="Users.php" class="nav-link" data-section="users">
-<i class="fas fa-users"></i>
+                    <i class="fas fa-users"></i>
                     <span>Users</span>
                 </a>
             </div>
-            <?php endif; ?>
-            <div class="nav-item">
-                <a href="Learning_Material.php" class="nav-link" data-section="learning">
-                    <i class="fas fa-book"></i>
-                    <span>Learning Materials</span>
-                </a>
-            </div>
-            <div class="nav-item">
-                <a href="Practice_Exams.php" class="nav-link active" data-section="exams">
-                    <i class="fas fa-clipboard-list"></i>
-                    <span>Practice Exams</span>
-                </a>
-            </div>
+            <?php if ($isAdmin): ?>
+                <div class="nav-item">
+                    <a href="Learning_Material.php" class="nav-link" data-section="learning">
+                        <i class="fas fa-book"></i>
+                        <span>Learning Materials</span>
+                    </a>
+                </div>
+                <div class="nav-item">
+                    <a href="Practice_Exams.php" class="nav-link active" data-section="exams">
+                        <i class="fas fa-clipboard-list"></i>
+                        <span>Practice Exams</span>
+                    </a>
+                </div>
+            <? endif; ?>
             <?php if ($isSuperAdmin): ?>
-            <div class="nav-item">
-                <a href="Discussion_Forums.php" class="nav-link" data-section="forums">
-<i class="fas fa-comments"></i>
-                    <span>Discussion Forums</span>
-                </a>
-            </div>
+                <div class="nav-item">
+                    <a href="Discussion_Forums.php" class="nav-link" data-section="forums">
+                        <i class="fas fa-comments"></i>
+                        <span>Discussion Forums</span>
+                    </a>
+                </div>
+            <?php endif; ?>
+            <?php if ($isSuperAdmin): ?>
+                <div class="nav-item">
+                    <a href="Generate_Reports.php" class="nav-link" data-section="reports">
+                        <i class="fas fa-file-alt"></i>
+                        <span>Generate Reports</span>
+                    </a>
+                </div>
             <?php endif; ?>
         </nav>
     </div>

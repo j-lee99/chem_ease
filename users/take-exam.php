@@ -802,13 +802,32 @@ $examId = intval($_GET['exam_id']);
 
         // SHOW RESULTS
         function showResults(data, timeTaken) {
-            const passed = data.score >= data.passing_score;
-            const statusText = passed ? 'Passed' : 'Failed';
-            const passingItems = Math.ceil((data.passing_score / 100) * data.total);
+            const grade = Number(data.grade ?? 0);
+            const rawPercent = Number(data.raw_percent ?? 0);
+            const total = Number(data.total ?? 0);
+            const correct = Number(data.correct ?? 0);
+            const answered = Number(data.total_answered ?? Object.keys(responses).length);
+            const passingGrade = Number(data.passing_score ?? 0);
 
+            const passed = (data.passed !== null && data.passed !== undefined) ?
+                !!data.passed :
+                (passingGrade > 0 ? (grade >= passingGrade) : false);
+
+            const statusText = passed ? 'Passed' : 'Failed';
+
+            // Required correct based on the same transmutation used in exam_submit.php:
+            // grade = 60 + 40 * (correct/total)
+            let requiredCorrect = 0;
+            if (total > 0 && passingGrade > 0) {
+                const needed = ((passingGrade - 60) / 40) * total;
+                requiredCorrect = Math.ceil(needed);
+                if (requiredCorrect < 0) requiredCorrect = 0;
+                if (requiredCorrect > total) requiredCorrect = total;
+            }
+
+            console.log('RESULT DATA:', data);
             document.getElementById('finalScore').innerHTML = `
-                <div>${data.score}%</div>
-                <div class="score-sub">${statusText}</div>
+                        <div>${rawPercent.toFixed(2)}%</div>
             `;
 
             const existingPassingLine = document.getElementById('passingLine');
@@ -821,21 +840,22 @@ $examId = intval($_GET['exam_id']);
             passingLine.style.fontWeight = '700';
             passingLine.style.color = '#6b7280';
             passingLine.style.fontSize = '0.9rem';
-            passingLine.innerHTML = `Passing Score: ${passingItems}/${data.total}`;
+            passingLine.innerHTML = passingGrade > 0 ?
+                `Passing Grade: ${passingGrade}% • Required Correct: ${requiredCorrect}/${total}` :
+                `Passing: N/A`;
 
             const scoreCircleEl = document.getElementById('scoreCircle');
             scoreCircleEl.after(passingLine);
 
             document.getElementById('scoreCircle').className = 'score-circle ' + (passed ? 'score-pass' : 'score-fail');
-            document.getElementById('resultsTitle').textContent = passed ? 'Exam Completed' : 'Exam Completed';
+            document.getElementById('resultsTitle').textContent = 'Exam Completed';
 
             // Stats
-            document.getElementById('statCorrect').textContent = data.correct;
-            const answered = Object.keys(responses).length;
-            const incorrect = Math.max(0, answered - data.correct);
+            document.getElementById('statCorrect').textContent = correct;
 
+            const incorrect = Math.max(0, answered - correct);
             document.getElementById('statIncorrect').textContent = incorrect;
-            document.getElementById('statUnanswered').textContent = Math.max(0, data.total - answered);
+            document.getElementById('statUnanswered').textContent = Math.max(0, total - answered);
             document.getElementById('statTime').textContent = timeTaken;
 
             // Detailed Results

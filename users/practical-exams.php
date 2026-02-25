@@ -1239,7 +1239,7 @@ $cats = ['Analytical Chemistry', 'Organic Chemistry', 'Physical Chemistry', 'Ino
         //   </div>
         //   <div class="exam-footer">
         //     <div class="start-btn">
-        //       ${e.user_score ? 'Retake' : 'Take'} Exam <i class="fas fa-play"></i>
+        //       ${bestGrade !== null ? 'Retake' : 'Take'} Exam <i class="fas fa-play"></i>
         //     </div>
         //     ${e.user_score !== null && e.user_score !== undefined
         //       ? `<small class="d-block text-center text-success mt-2">
@@ -1342,25 +1342,21 @@ $cats = ['Analytical Chemistry', 'Organic Chemistry', 'Physical Chemistry', 'Ino
                 const safeTopic = escapeAttr(e.topic || 'Not specified');
                 const totalItems = e.total_questions || e.actual_questions;
 
-                // Exam grade percent helpers
-                const toPercent = (score, total) => {
-                    const s = Number(score);
-                    const t = Number(total) || 0;
-                    if (!isFinite(s) || !isFinite(t) || t <= 0) return null;
-                    return Math.round((s / t) * 100);
-                };
-
-                const passingPercent = (e.passing_score !== null && e.passing_score !== undefined) ?
+                // Passing/Best are now grades (already % values), not raw counts.
+                // Some backends return 0 (via COALESCE) when there is no attempt yet.
+                const passingGrade = (e.passing_score !== null && e.passing_score !== undefined && e.passing_score !== '') ?
                     Math.round(Number(e.passing_score)) :
                     null;
 
-                const bestPercent = (e.user_score !== null && e.user_score !== undefined) ?
-                    toPercent(e.user_score, totalItems) :
+                const bestGradeRaw = (e.user_score !== null && e.user_score !== undefined && e.user_score !== '') ?
+                    Number(e.user_score) :
                     null;
 
+                const hasAttempt = (bestGradeRaw !== null && !Number.isNaN(bestGradeRaw) && bestGradeRaw > 0);
+                const bestGrade = hasAttempt ? Math.round(bestGradeRaw) : null;
 
-                if (bestPercent !== null) {
-                    totalScore += Number(bestPercent) || 0;
+                if (hasAttempt && bestGrade !== null) {
+                    totalScore += Number(bestGrade) || 0;
                     totalAttempts++;
                 }
 
@@ -1370,7 +1366,7 @@ $cats = ['Analytical Chemistry', 'Organic Chemistry', 'Physical Chemistry', 'Ino
                 div.className = 'exam-card';
                 div.style.cursor = 'pointer';
 
-                div.onclick = () => openDetailsModal(e.id, safeTitle, safeDesc, difficulty, totalItems, e.duration_minutes, passingPercent, safeTopic, bestPercent, category);
+                div.onclick = () => openDetailsModal(e.id, safeTitle, safeDesc, difficulty, totalItems, e.duration_minutes, passingGrade, safeTopic, bestGrade, category);
 
                 div.innerHTML = `
             <div class="exam-card-content">
@@ -1392,12 +1388,12 @@ $cats = ['Analytical Chemistry', 'Organic Chemistry', 'Physical Chemistry', 'Ino
             </div>
             <div class="exam-footer">
                 <div class="start-btn">
-                    ${e.user_score ? 'Retake' : 'Take'} Exam <i class="fas fa-play"></i>
+                    ${bestGrade !== null ? 'Retake' : 'Take'} Exam <i class="fas fa-play"></i>
                 </div>
                 ${
-                    bestPercent !== null
+                    bestGrade !== null
                         ? `<small class="d-block text-center text-success mt-2">
-                            Your best: ${bestPercent}%
+                            Your best: ${bestGrade}%
                           </small>`
                         : ''
                 }
@@ -1415,7 +1411,7 @@ $cats = ['Analytical Chemistry', 'Organic Chemistry', 'Physical Chemistry', 'Ino
             grid.appendChild(fragment);
 
             document.getElementById('userAvg').textContent =
-                totalAttempts ? Math.round(totalScore / totalAttempts) + '%' : '—';
+                totalAttempts ? (totalScore / totalAttempts).toFixed(2) + '%' : '—';
         }
 
 
