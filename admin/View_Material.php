@@ -220,7 +220,10 @@ if (count($pdfs) > 0) {
             <div class="nav-item"><a href="Users.php" class="nav-link"><i class="fas fa-users"></i><span>Users</span></a></div>
             <div class="nav-item"><a href="Learning_Material.php" class="nav-link active"><i class="fas fa-book"></i><span>Learning Materials</span></a></div>
             <div class="nav-item"><a href="Practice_Exams.php" class="nav-link"><i class="fas fa-clipboard-list"></i><span>Practice Exams</span></a></div>
-            <div class="nav-item"><a href="Discussion_Forums.php" class="nav-link"><i class="fas fa-comments"></i><span>Discussion Forums</span></a></div>
+            <?php if ($isSuperAdmin): ?>
+                <div class="nav-item"><a href="Discussion_Forums.php" class="nav-link"><i class="fas fa-comments"></i><span>Discussion Forums</span></a></div>
+                <div class="nav-item"><a href="Generate_Reports.php" class="nav-link"><i class="fas fa-file-alt"></i><span>Generate Reports</span></a></div>
+            <?php endif; ?>
         </nav>
     </div>
 
@@ -252,12 +255,12 @@ if (count($pdfs) > 0) {
                         <i class="fas fa-arrow-left me-2"></i>Back
                     </a>
                     <?php if ($isAdmin || $isSuperAdmin): ?>
-                    <button type="button" class="btn btn-outline-primary" id="editMaterialBtn">
-                        <i class="fas fa-pen me-2"></i>Edit
-                    </button>
-                    <button type="button" class="btn btn-outline-danger" id="deleteMaterialBtn">
-                        <i class="fas fa-trash me-2"></i>Delete
-                    </button>
+                        <button type="button" class="btn btn-outline-primary" id="editMaterialBtn">
+                            <i class="fas fa-pen me-2"></i>Edit
+                        </button>
+                        <button type="button" class="btn btn-outline-danger" id="deleteMaterialBtn">
+                            <i class="fas fa-trash me-2"></i>Delete
+                        </button>
                     <?php endif; ?>
                     <!-- <button class="btn btn-outline-primary" onclick="openFirst()">
                         <i class="fas fa-eye me-2"></i>Open First Item
@@ -344,9 +347,9 @@ if (count($pdfs) > 0) {
         </div>
     </div>
 
-    
 
-<!-- Edit Modal (unchanged) -->
+
+    <!-- Edit Modal (unchanged) -->
     <div class="modal fade" id="editModal" tabindex="-1" data-bs-backdrop="static" data-bs-keyboard="false">
         <div class="modal-dialog modal-xl">
             <div class="modal-content">
@@ -401,9 +404,9 @@ if (count($pdfs) > 0) {
             </div>
         </div>
     </div>
-    
 
-<script src="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.0/js/bootstrap.bundle.min.js"></script>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.0/js/bootstrap.bundle.min.js"></script>
     <script>
         const CAN_MANAGE_MATERIALS = <?= ($isAdmin || $isSuperAdmin) ? 'true' : 'false' ?>;
         const MATERIAL_ID = <?= (int)$materialId ?>;

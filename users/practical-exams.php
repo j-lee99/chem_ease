@@ -1342,8 +1342,6 @@ $cats = ['Analytical Chemistry', 'Organic Chemistry', 'Physical Chemistry', 'Ino
                 const safeTopic = escapeAttr(e.topic || 'Not specified');
                 const totalItems = e.total_questions || e.actual_questions;
 
-                // Passing/Best are now grades (already % values), not raw counts.
-                // Some backends return 0 (via COALESCE) when there is no attempt yet.
                 const passingGrade = (e.passing_score !== null && e.passing_score !== undefined && e.passing_score !== '') ?
                     Math.round(Number(e.passing_score)) :
                     null;
@@ -1460,25 +1458,37 @@ $cats = ['Analytical Chemistry', 'Organic Chemistry', 'Physical Chemistry', 'Ino
         }
 
         async function isModuleProgressComplete(moduleCode, category) {
-            // NOTE: get_progress.php payload (per your sample) does NOT include `category`.
-            // So we must not require category matching, or post tests will stay locked forever.
             if (!moduleCode) return false;
+
+            const wantedCode = String(moduleCode || '').trim();
+            const wantedCat  = norm(category || '');
+
+            const url = wantedCat
+                ? `../partial/get_progress.php?category=${encodeURIComponent(category)}`
+                : `../partial/get_progress.php`;
+
             try {
-                const resp = await fetch('../partial/get_progress.php');
+                const resp = await fetch(url);
                 const json = await resp.json();
                 const data = Array.isArray(json.data) ? json.data : [];
 
-                const code = String(moduleCode || '').trim();
-                const reStart = new RegExp(`^\\s*(?:Module\\s+)?${escapeRegExp(code)}\\b`, 'i');
-                const reAnywhere = new RegExp(`\\bModule\\s+${escapeRegExp(code)}\\b`, 'i');
+                const reStart = new RegExp(`^\\s*(?:Module\\s+)?${escapeRegExp(wantedCode)}\\b`, 'i');
+                const reAnywhere = new RegExp(`\\bModule\\s+${escapeRegExp(wantedCode)}\\b`, 'i');
 
-                const matchedByTitle = data.filter(m => {
-                    const title = String(m.title || '');
+                const matched = data.filter(mod => {
+                    const modCat = norm(mod?.category || '');
+                    if (wantedCat && modCat) {
+                        if (modCat !== wantedCat) return false;
+                    }
+
+                    // Match by module code in title
+                    const title = String(mod?.title || '');
                     return reStart.test(title) || reAnywhere.test(title);
                 });
-                if (matchedByTitle.length === 0) return false;
 
-                return matchedByTitle.some(mod => {
+                if (matched.length === 0) return false;
+
+                return matched.some(mod => {
                     const files = Array.isArray(mod.files) ? mod.files : [];
                     if (files.length === 0) return false;
                     return files.every(f => Number(f.progress || 0) >= 100);

@@ -53,7 +53,7 @@ function sendEmail($to, $subject, $body) {
 }
 
 // Fetch current user data
-$stmt = $conn->prepare("SELECT full_name, email, profile_image, password FROM users WHERE id = ? AND is_deleted = 0");
+$stmt = $conn->prepare("SELECT full_name, email, profile_image, password, mobile, birthday, address FROM users WHERE id = ? AND is_deleted = 0");
 $stmt->bind_param("i", $user_id);
 $stmt->execute();
 $current = $stmt->get_result()->fetch_assoc();
@@ -67,12 +67,12 @@ if (!$current) {
 $response = ['success' => false, 'message' => 'Invalid request'];
 
 switch ($action) {
-    // ────────────────────────────────────────────────────────────────
-    //  PROFILE UPDATE (name, email, photo) - unchanged except minor cleanup
-    // ────────────────────────────────────────────────────────────────
     case 'prepare_profile_update':
         $full_name = trim($_POST['full_name'] ?? '');
         $new_email = trim($_POST['email'] ?? '');
+        $mobile   = trim($_POST['mobile'] ?? '');
+        $birthday = trim($_POST['birthday'] ?? '');
+        $address  = trim($_POST['address'] ?? '');
 
         if (empty($full_name) || empty($new_email)) {
             $response['message'] = 'Name and email required';
@@ -84,7 +84,7 @@ switch ($action) {
             break;
         }
 
-        // Email already used by someone else?
+        // Email validation
         $stmt = $conn->prepare("SELECT id FROM users WHERE email = ? AND id != ? AND is_deleted = 0");
         $stmt->bind_param("si", $new_email, $user_id);
         $stmt->execute();
@@ -96,7 +96,6 @@ switch ($action) {
         }
         $stmt->close();
 
-        // Name already taken (if changed)?
         $name_changed = strcasecmp($full_name, $current['full_name']) !== 0;
         if ($name_changed) {
             $stmt = $conn->prepare("SELECT id FROM users WHERE full_name = ? AND id != ? AND is_deleted = 0");
@@ -143,9 +142,8 @@ switch ($action) {
         $email_changed = ($new_email !== $current['email']);
 
         if (!$email_changed) {
-            // No email change → update immediately
-            $stmt = $conn->prepare("UPDATE users SET full_name = ?, profile_image = ? WHERE id = ?");
-            $stmt->bind_param("ssi", $full_name, $profile_image, $user_id);
+            $stmt = $conn->prepare("UPDATE users SET full_name = ?, profile_image = ?, mobile = ?, birthday = ?, address = ? WHERE id = ?");
+            $stmt->bind_param("sssssi", $full_name, $profile_image, $mobile, $birthday, $address, $user_id);
             if ($stmt->execute()) {
                 $_SESSION['full_name'] = $full_name;
                 $response = [
@@ -165,6 +163,9 @@ switch ($action) {
                 'full_name'     => $full_name,
                 'email'         => $new_email,
                 'profile_image' => $profile_image,
+                'mobile'        => $mobile,
+                'birthday'      => $birthday,
+                'address'       => $address,
                 'otp'           => sprintf("%06d", mt_rand(0, 999999)),
                 'otp_time'      => time(),
                 'original_email'=> $current['email']
@@ -207,6 +208,10 @@ switch ($action) {
 
         $pending = $_SESSION['pending_profile_update'];
 
+        $pending_mobile = $pending['mobile'] ?? '';
+        $pending_birthday = $pending['birthday'] ?? '';
+        $pending_address = $pending['address'] ?? '';
+
         if (time() - $pending['otp_time'] > 900) { // 15 min
             unset($_SESSION['pending_profile_update']);
             $response['message'] = 'Verification code expired. Please try again.';
@@ -219,8 +224,8 @@ switch ($action) {
         }
 
         // Update profile with pending data
-        $stmt = $conn->prepare("UPDATE users SET full_name = ?, email = ?, profile_image = ? WHERE id = ?");
-        $stmt->bind_param("sssi", $pending['full_name'], $pending['email'], $pending['profile_image'], $user_id);
+        $stmt = $conn->prepare("UPDATE users SET full_name = ?, email = ?, profile_image = ?, mobile = ?, birthday = ?, address = ? WHERE id = ?");
+        $stmt->bind_param("ssssssi", $pending['full_name'], $pending['email'], $pending['profile_image'], $pending_mobile, $pending_birthday, $pending_address, $user_id);
         if ($stmt->execute()) {
             $_SESSION['full_name'] = $pending['full_name'];
             $response = [
@@ -235,7 +240,7 @@ switch ($action) {
         break;
 
     // ────────────────────────────────────────────────────────────────
-    //  CHANGE PASSWORD WITH OTP VERIFICATION (NEW FEATURE)
+    //  CHANGE PASSWORD WITH OTP VERIFICATION
     // ────────────────────────────────────────────────────────────────
     case 'prepare_password_change':
         $current_pass = $_POST['current_password'] ?? '';
@@ -330,7 +335,7 @@ switch ($action) {
         break;
 
     // ────────────────────────────────────────────────────────────────
-    //  DELETE ACCOUNT (unchanged)
+    //  DELETE ACCOUNT 
     // ────────────────────────────────────────────────────────────────
     case 'delete_account':
         $pass = $_POST['password'] ?? '';
