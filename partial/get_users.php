@@ -4,6 +4,9 @@ require_once 'db_conn.php';
 session_start();
 
 header('Content-Type: application/json; charset=utf-8');
+$role = $_SESSION['role'] ?? '';
+$isAdmin = ($role === 'admin');
+$isSuperAdmin = ($role === 'super_admin');
 
 // Only allow admins
 if (!isset($_SESSION['user_id'])) {
@@ -226,7 +229,14 @@ if ($limit > 50) $limit = 50;
 $offset = ($page - 1) * $limit;
 $search = trim($_GET['search'] ?? '');
 
-$where = "WHERE is_deleted = 0 AND role != 'admin'";
+if ($isAdmin) {
+    $where = "WHERE is_deleted = 0 AND role != 'super_admin'";
+} elseif ($isSuperAdmin) {
+    $where = "WHERE is_deleted = 0";
+} else {
+    $where = "WHERE is_deleted = 0 AND role != 'admin'";
+}
+
 $params = [];
 $types = '';
 

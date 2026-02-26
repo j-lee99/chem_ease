@@ -968,7 +968,7 @@ $cats = ['Analytical Chemistry', 'Organic Chemistry', 'Physical Chemistry', 'Ino
             let currentModalElement = null;
 
             let bypassPrereqOnce = false;
-            
+
             // Post-test prerequisite gating
             const POSTTEST_STATUS = new Map(); // key: "Category::ModuleCode" => { passed: bool, bestPct, passingPct }
 
@@ -1003,13 +1003,14 @@ $cats = ['Analytical Chemistry', 'Organic Chemistry', 'Physical Chemistry', 'Ino
 
                         const totalItems = Number(e.total_questions || e.actual_questions || 0);
                         const bestPct = (e.user_score !== null && e.user_score !== undefined) ?
-                            toPercent(e.user_score, totalItems) :
+                            Math.round(Number(e.user_score)) :
                             null;
                         const passingPct = (e.passing_score !== null && e.passing_score !== undefined) ?
                             Math.round(Number(e.passing_score)) :
                             null;
 
                         const passed = (bestPct !== null && passingPct !== null && bestPct >= passingPct);
+                        console.log(passed)
                         POSTTEST_STATUS.set(`${e.category}::${moduleCode}`, {
                             passed,
                             bestPct,
@@ -1020,6 +1021,9 @@ $cats = ['Analytical Chemistry', 'Organic Chemistry', 'Physical Chemistry', 'Ino
                     console.error('Failed to load post-test status:', err);
                 }
             }
+
+            // Kick off prerequisite data loading ASAP
+            loadPostTestStatus();
 
             let prereqPrevMaterialId = null;
 
@@ -1149,7 +1153,7 @@ $cats = ['Analytical Chemistry', 'Organic Chemistry', 'Physical Chemistry', 'Ino
                 document.body.style.paddingRight = '';
             }
 
-            
+
             function enforcePrerequisitesFromButton(btnEl) {
                 try {
                     const card = btnEl.closest('.material-card');
@@ -1194,7 +1198,7 @@ $cats = ['Analytical Chemistry', 'Organic Chemistry', 'Physical Chemistry', 'Ino
                 }
             }
 
-document.querySelectorAll('.view-btn').forEach(btn => {
+            document.querySelectorAll('.view-btn').forEach(btn => {
                 btn.addEventListener('click', e => {
                     e.stopPropagation();
 
@@ -1400,7 +1404,9 @@ document.querySelectorAll('.view-btn').forEach(btn => {
 
                 getPdfSizeBytes(url).then((bytes) => {
                     const secondsToComplete = estimateSeconds(bytes);
-                    startTimeBasedTracking(fileId, secondsToComplete, { minDelta: 1 });
+                    startTimeBasedTracking(fileId, secondsToComplete, {
+                        minDelta: 1
+                    });
                 });
             }
 
@@ -1469,7 +1475,9 @@ document.querySelectorAll('.view-btn').forEach(btn => {
             }
 
             function saveProgressSmart(fileId, pct, opts = {}) {
-                const { force = false, minDelta = 2 } = opts;
+                const {
+                    force = false, minDelta = 2
+                } = opts;
 
                 pct = clampPct(pct); // keep as float for better sensitivity
                 const prev = __progressState.lastSavedPct.get(String(fileId)) ?? 0;
@@ -1503,7 +1511,9 @@ document.querySelectorAll('.view-btn').forEach(btn => {
             }
 
             function startTimeBasedTracking(fileId, secondsToComplete = 600, opts = {}) {
-                const { tickSeconds = 5, tickMs = 5000, minDelta = 2 } = opts;
+                const {
+                    tickSeconds = 5, tickMs = 5000, minDelta = 2
+                } = opts;
 
                 let seconds = 0;
 
@@ -1512,25 +1522,33 @@ document.querySelectorAll('.view-btn').forEach(btn => {
 
                     const pct = (seconds / Math.max(1, secondsToComplete)) * 100;
                     updateProgressUiSmart(fileId, pct);
-                    saveProgressSmart(fileId, pct, { minDelta });
+                    saveProgressSmart(fileId, pct, {
+                        minDelta
+                    });
                 }, tickMs);
 
-                // warm start so the user sees immediate feedback
                 const warmup = setTimeout(() => {
                     updateProgressUiSmart(fileId, 1);
-                    saveProgressSmart(fileId, 1, { force: true, minDelta });
+                    saveProgressSmart(fileId, 1, {
+                        force: true,
+                        minDelta
+                    });
                 }, 1200);
 
                 registerCleanup(() => {
                     clearInterval(intervalId);
                     clearTimeout(warmup);
                     const pct = (seconds / Math.max(1, secondsToComplete)) * 100;
-                    saveProgressSmart(fileId, pct, { force: true, minDelta });
+                    saveProgressSmart(fileId, pct, {
+                        force: true,
+                        minDelta
+                    });
                 });
             }
 
 
             let __ytApiPromise = null;
+
             function ensureYouTubeApi() {
                 if (window.YT && window.YT.Player) return Promise.resolve();
 
@@ -1752,9 +1770,25 @@ document.querySelectorAll('.view-btn').forEach(btn => {
           </div>
         `);
                         });
+
+                        // Cache computed progress for prerequisite checks
+                        try {
+                            const vals = files.map(f => Number(f.progress || 0)).filter(v => Number.isFinite(v));
+                            const avg = vals.length ? (vals.reduce((a, b) => a + b, 0) / vals.length) : 0;
+                            const complete = vals.length ? vals.every(v => v >= 100) : false;
+                            MATERIAL_PROGRESS.set(String(mid), {
+                                avg,
+                                complete
+                            });
+                        } catch (e) {}
                     });
+
+                    progressReady = true;
                 })
-                .catch(err => console.error('Progress fetch error:', err));
+                .catch(err => {
+                    console.error('Progress fetch error:', err);
+                    progressReady = true;
+                });
 
             // document.querySelectorAll('.material-card').forEach(card => {
             //     const mid = card.dataset.id;

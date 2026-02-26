@@ -293,7 +293,7 @@ if (!isset($_SESSION['user_id']) || !in_array(($_SESSION['role'] ?? ''), ['admin
                         <span>Practice Exams</span>
                     </a>
                 </div>
-            <? endif; ?>
+            <?php endif ?>
             <?php if ($isSuperAdmin): ?>
                 <div class="nav-item">
                     <a href="Discussion_Forums.php" class="nav-link" data-section="forums">
@@ -301,7 +301,7 @@ if (!isset($_SESSION['user_id']) || !in_array(($_SESSION['role'] ?? ''), ['admin
                         <span>Discussion Forums</span>
                     </a>
                 </div>
-            <?php endif; ?>
+            <?php endif ?>
             <?php if ($isSuperAdmin): ?>
                 <div class="nav-item">
                     <a href="Generate_Reports.php" class="nav-link" data-section="reports">
@@ -309,7 +309,7 @@ if (!isset($_SESSION['user_id']) || !in_array(($_SESSION['role'] ?? ''), ['admin
                         <span>Generate Reports</span>
                     </a>
                 </div>
-            <?php endif; ?>
+            <?php endif ?>
         </nav>
     </div>
     <!-- Top Navbar -->
