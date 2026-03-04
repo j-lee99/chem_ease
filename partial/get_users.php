@@ -85,7 +85,7 @@ if (isset($_GET['user_id'])) {
     }
     if (empty($selectCols)) $selectCols = ['`id`'];
 
-    $sqlUser = "SELECT " . implode(', ', $selectCols) . " FROM users WHERE id = ? AND is_deleted = 0 AND role != 'admin' LIMIT 1";
+    $sqlUser = "SELECT " . implode(', ', $selectCols) . " FROM users WHERE id = ? AND is_deleted = 0 LIMIT 1";
     $stmt = $conn->prepare($sqlUser);
     $stmt->bind_param('i', $userId);
     $stmt->execute();
@@ -230,9 +230,9 @@ $offset = ($page - 1) * $limit;
 $search = trim($_GET['search'] ?? '');
 
 if ($isAdmin) {
-    $where = "WHERE is_deleted = 0 AND role != 'super_admin'";
+    $where = "WHERE is_deleted = 0 AND role != 'super_admin' AND role != 'admin'";
 } elseif ($isSuperAdmin) {
-    $where = "WHERE is_deleted = 0";
+    $where = "WHERE is_deleted = 0 AND role != 'super_admin'";
 } else {
     $where = "WHERE is_deleted = 0 AND role != 'admin'";
 }

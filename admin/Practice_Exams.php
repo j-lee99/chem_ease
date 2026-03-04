@@ -294,14 +294,14 @@ if (!isset($_SESSION['user_id']) || !in_array(($_SESSION['role'] ?? ''), ['admin
                     </a>
                 </div>
             <?php endif ?>
-            <?php if ($isSuperAdmin): ?>
+            <?php if ($isSuperAdmin || $isAdmin): ?>
                 <div class="nav-item">
-                    <a href="Discussion_Forums.php" class="nav-link" data-section="forums">
+                    <a href="Discussion_Forums.php" class="nav-link">
                         <i class="fas fa-comments"></i>
                         <span>Discussion Forums</span>
                     </a>
                 </div>
-            <?php endif ?>
+            <?php endif; ?>
             <?php if ($isSuperAdmin): ?>
                 <div class="nav-item">
                     <a href="Generate_Reports.php" class="nav-link" data-section="reports">
