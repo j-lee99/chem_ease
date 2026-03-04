@@ -323,8 +323,15 @@ if (!isset($_SESSION['user_id']) || !in_array(($_SESSION['role'] ?? ''), ['admin
                 <div class="nav-item"><a href="Learning_Material.php" class="nav-link active"><i class="fas fa-book"></i><span>Learning Materials</span></a></div>
                 <div class="nav-item"><a href="Practice_Exams.php" class="nav-link"><i class="fas fa-clipboard-list"></i><span>Practice Exams</span></a></div>
             <?php endif; ?>
+              <?php if ($isSuperAdmin || $isAdmin): ?>
+                <div class="nav-item">
+                    <a href="Discussion_Forums.php" class="nav-link">
+                        <i class="fas fa-comments"></i>
+                        <span>Discussion Forums</span>
+                    </a>
+                </div>
+            <?php endif; ?>
             <?php if ($isSuperAdmin): ?>
-                <div class="nav-item"><a href="Discussion_Forums.php" class="nav-link"><i class="fas fa-comments"></i><span>Discussion Forums</span></a></div>
                 <div class="nav-item"><a href="Generate_Reports.php" class="nav-link"><i class="fas fa-file-lines"></i><span>Generate Reports</span></a></div>
             <?php endif; ?>
         </nav>

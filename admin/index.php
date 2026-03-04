@@ -582,7 +582,7 @@ if (!isset($_SESSION['user_id']) || !in_array($role, ['admin', 'super_admin'], t
                 </div>
             <?php endif; ?>
 
-            <?php if ($isSuperAdmin): ?>
+            <?php if ($isSuperAdmin || $isAdmin): ?>
                 <div class="nav-item">
                     <a href="Discussion_Forums.php" class="nav-link">
                         <i class="fas fa-comments"></i>
