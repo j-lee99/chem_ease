@@ -229,6 +229,38 @@ $cats = ['Analytical Chemistry', 'Organic Chemistry', 'Physical Chemistry', 'Ino
             flex-wrap: wrap;
             gap: 0.75rem;
         }
+        .exam-state {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 30px;
+            height: 30px;
+            border-radius: 999px;
+            font-size: 1rem;
+            flex: 0 0 auto;
+        }
+        .exam-state.locked {
+            background: rgba(0,0,0,0.06);
+            color: rgba(0,0,0,0.45);
+        }
+        .exam-state.passed {
+            background: rgba(25,135,84,0.12);
+            color: #198754;
+        }
+        .exam-locked {
+            opacity: 0.6;
+            filter: grayscale(0.6);
+            pointer-events: none; /* disable clicks for locked cards */
+        }
+        .exam-locked .start-btn {
+            background: rgba(0,0,0,0.08) !important;
+            color: rgba(0,0,0,0.55) !important;
+        }
+        .exam-locked .start-btn i {
+            opacity: 0.75;
+        }
+        .start-btn.disabled { cursor: not-allowed; }
+
 
         .exam-category-header {
             grid-column: 1 / -1;
@@ -1159,128 +1191,7 @@ $cats = ['Analytical Chemistry', 'Organic Chemistry', 'Physical Chemistry', 'Ino
         function showModal(id) {
             new bootstrap.Modal(document.getElementById(id)).show();
         }
-
-        // function loadExams() {
-        //     fetch('../partial/exam_list.php')
-        //         .then(r => r.json())
-        //         .then(({
-        //             data
-        //         }) => {
-        //             const grid = document.getElementById('examsGrid');
-        //             grid.innerHTML = '';
-
-        //             if (!Array.isArray(data) || !data.length) {
-        //                 grid.innerHTML = `
-        //   <div class="text-center col-12">
-        //     <h4>No exams available yet.</h4>
-        //   </div>`;
-        //                 return;
-        //             }
-
-        //             console.log(data)
-        //             let totalScore = 0;
-        //             let totalAttempts = 0;
-
-        //             const fragment = document.createDocumentFragment();
-
-        //             for (const e of data) {
-        //                 const difficulty = (e.difficulty || 'Beginner');
-        //                 const badge =
-        //                     difficulty === 'Beginner' ? 'success' :
-        //                     difficulty === 'Intermediate' ? 'warning' :
-        //                     'danger';
-
-        //                 if (e.user_score !== null && e.user_score !== undefined) {
-        //                     totalScore += Number(e.user_score) || 0;
-        //                     totalAttempts++;
-        //                 }
-
-        //                 let shortDesc = e.description || 'No description available.';
-        //                 if (shortDesc.length > 120) {
-        //                     shortDesc = shortDesc.slice(0, 117) + '...';
-        //                 }
-
-        //                 const safeTitle = escapeAttr(e.title);
-        //                 const safeDesc = escapeAttr(e.description || '');
-        //                 const safeTopic = escapeAttr(e.topic || 'Not specified');
-
-        //                 const div = document.createElement('div');
-        //                 div.className = 'exam-card';
-        //                 div.style.cursor = 'pointer';
-        //                 div.onclick = () => openDetailsModal(
-        //                     e.id,
-        //                     safeTitle,
-        //                     safeDesc,
-        //                     difficulty,
-        //                     e.total_questions || e.actual_questions,
-        //                     e.duration_minutes,
-        //                     e.passing_score,
-        //                     safeTopic,
-        //                     e.user_score ?? null
-        //                 );
-
-        //                 div.innerHTML = `
-        //   <div class="exam-card-content">
-        //     <div class="exam-header">
-        //       <h3 class="exam-title">${e.title}</h3>
-        //       <span class="difficulty-badge ${badge}">${difficulty}</span>
-        //     </div>
-        //     <p class="exam-description">${shortDesc}</p>
-        //     <div class="exam-stats">
-        //       <div class="stat-item">
-        //         <i class="fas fa-question-circle stat-icon"></i>
-        //         <span>${e.total_questions || e.actual_questions} Questions</span>
-        //       </div>
-        //       <div class="stat-item">
-        //         <i class="fas fa-clock stat-icon"></i>
-        //         <span>${e.duration_minutes} Minutes</span>
-        //       </div>
-        //     </div>
-        //   </div>
-        //   <div class="exam-footer">
-        //     <div class="start-btn">
-        //       ${bestGrade !== null ? 'Retake' : 'Take'} Exam <i class="fas fa-play"></i>
-        //     </div>
-        //     ${e.user_score !== null && e.user_score !== undefined
-        //       ? `<small class="d-block text-center text-success mt-2">
-        //            Your best: ${e.user_score}%
-        //          </small>`
-        //       : ''
-        //     }
-        //   </div>
-        // `;
-
-        //                 div.querySelector('.start-btn').onclick = ev => {
-        //                     ev.stopPropagation();
-        //                     openDetailsModal(e.id,
-        //                         safeTitle,
-        //                         safeDesc,
-        //                         difficulty,
-        //                         e.total_questions || e.actual_questions,
-        //                         e.duration_minutes,
-        //                         e.passing_score,
-        //                         safeTopic,
-        //                         e.user_score ?? null);
-        //                 };
-
-        //                 fragment.appendChild(div);
-        //             }
-
-        //             grid.appendChild(fragment);
-
-        //             if (totalAttempts > 0) {
-        //                 document.getElementById('userAvg').textContent =
-        //                     Math.round(totalScore / totalAttempts) + '%';
-        //             }
-        //         })
-        //         .catch(err => {
-        //             console.error('Load exams error:', err);
-        //             document.getElementById('examsGrid').innerHTML = `
-        // <div class="text-center col-12 text-danger">
-        //   Failed to load exams.
-        // </div>`;
-        //         });
-        // }
+        
         const CATEGORIES = [
             'Analytical Chemistry',
             'Organic Chemistry',
@@ -1309,7 +1220,87 @@ $cats = ['Analytical Chemistry', 'Organic Chemistry', 'Physical Chemistry', 'Ino
                 .catch(err => console.error('Failed to load exams:', err));
         }
 
-        function renderExamsByCategory(category) {
+        // Cache progress lookups so we don't spam requests while rendering cards
+        const _progressCache = new Map(); 
+
+        async function _fetchProgressData(category) {
+            const key = norm(category || '');
+            if (_progressCache.has(key)) return _progressCache.get(key);
+
+            const url = key
+                ? `../partial/get_progress.php?category=${encodeURIComponent(category)}`
+                : `../partial/get_progress.php`;
+
+            const resp = await fetch(url);
+            const json = await resp.json();
+            const data = Array.isArray(json.data) ? json.data : [];
+            _progressCache.set(key, data);
+            return data;
+        }
+
+        async function _isPostTestLocked(title, category) {
+            if (!isPostTestTitle(title)) return false;
+
+            const moduleCode = getModuleCodeFromPostTestTitle(title);
+            if (!moduleCode) return true;
+
+            const variants = moduleCodeVariants(moduleCode);
+            if (!variants.length) return true;
+
+            try {
+                const data = await _fetchProgressData(category);
+
+                const regexes = variants.map(v => ([
+                    new RegExp(`^\\s*(?:Module\\s+)?${escapeRegExp(v)}\\b`, 'i'),
+                    new RegExp(`\\bModule\\s+${escapeRegExp(v)}\\b`, 'i'),
+                ])).flat();
+
+                const matched = data.filter(d => {
+                    const t = String(d?.title || d?.module || d?.name || '');
+                    return regexes.some(re => re.test(t));
+                });
+
+                if (matched.length === 0) return true; // if can't find module keep locked
+
+                const isComplete = (row) => {
+                    const files = Array.isArray(row?.files) ? row.files : [];
+                    if (files.length) {
+                        return files.every(f => toPercentNumber(f?.progress) >= 100);
+                    }
+
+                    // Fallback to module-level percent fields
+                    const p = toPercentNumber(row?.progress ?? row?.completion ?? row?.percent ?? row?.percentage);
+                    return p >= 100;
+                };
+
+                // Unlock if ANY matched module is complete
+                return !matched.some(isComplete);
+            } catch (e) {
+                // If we can't check, default to locked for safety
+                return true;
+            }
+        }
+
+        
+        function _computeBestGrade(exam) {
+            const raw = (exam?.best_score !== undefined && exam?.best_score !== null && exam?.best_score !== '') ?
+                Number(exam.best_score) :
+                ((exam?.user_score !== undefined && exam?.user_score !== null && exam?.user_score !== '') ?
+                    Number(exam.user_score) :
+                    null);
+            if (raw === null || Number.isNaN(raw) || raw <= 0) return null;
+            return Math.round(raw);
+        }
+
+        function _computePassingGrade(exam) {
+            const raw = (exam?.passing_score !== undefined && exam?.passing_score !== null && exam?.passing_score !== '') ?
+                Number(exam.passing_score) :
+                null;
+            if (raw === null || Number.isNaN(raw) || raw <= 0) return null;
+            return Math.round(raw);
+        }
+
+async function renderExamsByCategory(category) {
             const grid = document.getElementById('examsGrid');
             grid.innerHTML = '';
 
@@ -1325,7 +1316,31 @@ $cats = ['Analytical Chemistry', 'Organic Chemistry', 'Physical Chemistry', 'Ino
 
             let totalScore = 0;
             let totalAttempts = 0;
-            const fragment = document.createDocumentFragment();
+
+            // Pre-calc locked status (this only affects POST TEST exams)
+            const lockedMap = new Map();
+            await Promise.all(exams.map(async (e) => {
+                const locked = await _isPostTestLocked(e.title, category);
+                lockedMap.set(e.id, locked);
+            }));
+
+            
+            // Gate: Non-POST TEST exams stay locked until ALL POST TESTs in this category are PASSED.
+            //  If a POST TEST is still locked (module not 100%), we consider it not passed.
+            //  If there are no POST TESTs in this category, we don't gate anything.
+            const postTestsInCategory = exams.filter(x => isPostTestTitle(x.title));
+            const allPostTestsPassedInCategory = postTestsInCategory.length === 0 ? true : postTestsInCategory.every(x => {
+                const locked = !!lockedMap.get(x.id);
+                if (locked) return false;
+
+                const best = _computeBestGrade(x);
+                const passing = _computePassingGrade(x);
+
+                if (best === null || passing === null) return false;
+                return best >= passing;
+            });
+
+const fragment = document.createDocumentFragment();
 
             for (const e of exams) {
                 const difficulty = (e.difficulty || 'Beginner');
@@ -1342,34 +1357,47 @@ $cats = ['Analytical Chemistry', 'Organic Chemistry', 'Physical Chemistry', 'Ino
                 const safeTopic = escapeAttr(e.topic || 'Not specified');
                 const totalItems = e.total_questions || e.actual_questions;
 
-                const passingGrade = (e.passing_score !== null && e.passing_score !== undefined && e.passing_score !== '') ?
-                    Math.round(Number(e.passing_score)) :
-                    null;
-
-                const bestGradeRaw = (e.user_score !== null && e.user_score !== undefined && e.user_score !== '') ?
-                    Number(e.user_score) :
-                    null;
-
-                const hasAttempt = (bestGradeRaw !== null && !Number.isNaN(bestGradeRaw) && bestGradeRaw > 0);
-                const bestGrade = hasAttempt ? Math.round(bestGradeRaw) : null;
+                const passingGrade = _computePassingGrade(e);
+                const bestGrade = _computeBestGrade(e);
+                const hasAttempt = (bestGrade !== null);
 
                 if (hasAttempt && bestGrade !== null) {
                     totalScore += Number(bestGrade) || 0;
                     totalAttempts++;
                 }
 
+                const isPostTest = isPostTestTitle(e.title);
+                const lockedByPostTestRule = isPostTest ? !!lockedMap.get(e.id) : false;
+                const lockedByGateRule = (!isPostTest && !allPostTestsPassedInCategory);
+                const isLocked = lockedByPostTestRule || lockedByGateRule;
+
+                const isPassed = (!isLocked && bestGrade !== null && passingGrade !== null && bestGrade >= passingGrade);
+
                 examMetaMap.set(e.id, { title: e.title, category, moduleCode: getModuleCodeFromPostTestTitle(e.title) });
 
                 const div = document.createElement('div');
-                div.className = 'exam-card';
-                div.style.cursor = 'pointer';
+                div.className = 'exam-card' + (isLocked ? ' exam-locked' : '') + (isPassed ? ' exam-passed' : '');
+                div.style.cursor = isLocked ? 'not-allowed' : 'pointer';
 
-                div.onclick = () => openDetailsModal(e.id, safeTitle, safeDesc, difficulty, totalItems, e.duration_minutes, passingGrade, safeTopic, bestGrade, category);
+                div.onclick = () => {
+                    if (isLocked) return; // locked cards should not open details/modal
+                    openDetailsModal(e.id, safeTitle, safeDesc, difficulty, totalItems, e.duration_minutes, passingGrade, safeTopic, bestGrade, category);
+                };
+
+                const stateIconHtml = isLocked
+                    ? `<span class="exam-state locked" title="Locked"><i class="fas fa-lock"></i></span>`
+                    : (isPassed
+                        ? `<span class="exam-state passed" title="Passed"><i class="fas fa-check-circle"></i></span>`
+                        : '');
+
+                const startBtnHtml = isLocked
+                    ? `Locked <i class="fas fa-lock"></i>`
+                    : `${bestGrade !== null ? 'Retake' : 'Take'} Exam <i class="fas fa-play"></i>`;
 
                 div.innerHTML = `
             <div class="exam-card-content">
                 <div class="exam-header">
-                    <h3 class="exam-title">${e.title}</h3>
+                    <h3 class="exam-title"><span class="exam-title-text">${e.title}</span>${stateIconHtml}</h3>
                     <span class="difficulty-badge ${badge}">${difficulty}</span>
                 </div>
                 <p class="exam-description">${shortDesc}</p>
@@ -1385,13 +1413,13 @@ $cats = ['Analytical Chemistry', 'Organic Chemistry', 'Physical Chemistry', 'Ino
                 </div>
             </div>
             <div class="exam-footer">
-                <div class="start-btn">
-                    ${bestGrade !== null ? 'Retake' : 'Take'} Exam <i class="fas fa-play"></i>
+                <div class="start-btn${isLocked ? ' disabled' : ''}">
+                    ${startBtnHtml}
                 </div>
                 ${
-                    bestGrade !== null
-                        ? `<small class="d-block text-center text-success mt-2">
-                            Your best: ${bestGrade}%
+                    (!isLocked && bestGrade !== null)
+                        ? `<small class="d-block text-center ${isPassed ? 'text-success' : 'text-muted'} mt-2">
+                            Your best: ${bestGrade}%${isPassed ? ' ✓' : ''}
                           </small>`
                         : ''
                 }
@@ -1400,6 +1428,7 @@ $cats = ['Analytical Chemistry', 'Organic Chemistry', 'Physical Chemistry', 'Ino
 
                 div.querySelector('.start-btn').onclick = ev => {
                     ev.stopPropagation();
+                    if (isLocked) return; // locked cards/buttons should not open any modal
                     div.onclick();
                 };
 
@@ -1456,6 +1485,82 @@ $cats = ['Analytical Chemistry', 'Organic Chemistry', 'Physical Chemistry', 'Ino
         function norm(str) {
             return String(str || '').trim().toLowerCase().replace(/\s+/g, ' ');
         }
+
+        // Convert values like "100", "100.00", "100%" into a number (NaN-safe)
+        function toPercentNumber(val) {
+            if (val === null || val === undefined) return Number.NaN;
+            if (typeof val === 'string') {
+                const cleaned = val.replace('%', '').trim();
+                const n = parseFloat(cleaned);
+                return Number.isFinite(n) ? n : Number.NaN;
+            }
+            const n = Number(val);
+            return Number.isFinite(n) ? n : Number.NaN;
+        }
+
+        function romanToInt(roman) {
+            const map = { I: 1, V: 5, X: 10, L: 50, C: 100, D: 500, M: 1000 };
+            const s = String(roman || '').toUpperCase().trim();
+            if (!s) return 0;
+            let total = 0;
+            let prev = 0;
+            for (let i = s.length - 1; i >= 0; i--) {
+                const cur = map[s[i]] || 0;
+                if (cur < prev) total -= cur;
+                else {
+                    total += cur;
+                    prev = cur;
+                }
+            }
+            return total;
+        }
+
+        function intToRoman(num) {
+            let n = Number(num) || 0;
+            if (n <= 0) return '';
+            const vals = [
+                [1000, 'M'], [900, 'CM'], [500, 'D'], [400, 'CD'],
+                [100, 'C'], [90, 'XC'], [50, 'L'], [40, 'XL'],
+                [10, 'X'], [9, 'IX'], [5, 'V'], [4, 'IV'], [1, 'I'],
+            ];
+            let out = '';
+            for (const [v, sym] of vals) {
+                while (n >= v) {
+                    out += sym;
+                    n -= v;
+                }
+            }
+            return out;
+        }
+
+        // Returns multiple acceptable codes for matching a module title.
+        // Examples: "A" -> ["A","I"], "B" -> ["B","II"], "II" -> ["II","B"]
+        function moduleCodeVariants(code) {
+            const c = String(code || '').trim();
+            if (!c) return [];
+
+            const set = new Set([c]);
+
+            // Letter -> roman (A=I, B=II, C=III...)
+            if (/^[A-Z]$/i.test(c)) {
+                const n = c.toUpperCase().charCodeAt(0) - 64; // A=1
+                if (n >= 1 && n <= 26) {
+                    const roman = intToRoman(n);
+                    if (roman) set.add(roman);
+                }
+            }
+
+            // Roman -> letter
+            if (/^[IVXLCDM]+$/i.test(c)) {
+                const n = romanToInt(c);
+                if (n >= 1 && n <= 26) {
+                    set.add(String.fromCharCode(64 + n));
+                }
+            }
+
+            return Array.from(set);
+        }
+
 
         async function isModuleProgressComplete(moduleCode, category) {
             if (!moduleCode) return false;
