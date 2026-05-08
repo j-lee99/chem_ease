@@ -1,21 +1,28 @@
 <?php
 require_once '../partial/db_conn.php';
-if (!isset($_SESSION['user_id'])) {
+$role = $_SESSION['role'] ?? 'guest';
+$isGuest = ($role === 'guest');
+
+if (!$isGuest && !isset($_SESSION['user_id'])) {
     header('Location: ../signin.php');
     exit;
 }
-$userId = $_SESSION['user_id'];
-$fullName = $_SESSION['full_name'] ?? 'User';
-$role = $_SESSION['role'] ?? 'user';
+
+$userId = $isGuest ? 0 : (int)($_SESSION['user_id'] ?? 0);
+$fullName = $_SESSION['full_name'] ?? ($isGuest ? 'Guest User' : 'User');
 $isAdmin = ($role === 'admin');
+
 // === Get profile image safely ===
-$profileStmt = $conn->prepare("SELECT profile_image FROM users WHERE id = ?");
-$profileStmt->bind_param('i', $userId);
-$profileStmt->execute();
-$profileResult = $profileStmt->get_result();
-$userRow = $profileResult->fetch_assoc();
-$profileImage = $userRow['profile_image'] ?? null;
-$profileStmt->close();
+$profileImage = null;
+if (!$isGuest && $userId > 0) {
+    $profileStmt = $conn->prepare("SELECT profile_image FROM users WHERE id = ?");
+    $profileStmt->bind_param('i', $userId);
+    $profileStmt->execute();
+    $profileResult = $profileStmt->get_result();
+    $userRow = $profileResult->fetch_assoc();
+    $profileImage = $userRow['profile_image'] ?? null;
+    $profileStmt->close();
+}
 // === Generate initials ===
 $initials = '';
 if ($fullName) {
@@ -29,6 +36,7 @@ if ($fullName) {
 }
 if (empty($initials)) $initials = 'U';
 ?>
+
 <div class="forums-container">
     <div class="page-header mb-4">
         <div class="d-flex justify-content-between align-items-center flex-wrap gap-3">
@@ -36,11 +44,23 @@ if (empty($initials)) $initials = 'U';
                 <h2 class="page-title mb-2">Discussion Forums</h2>
                 <p class="page-subtitle text-muted mb-0">Connect with peers and experts.</p>
             </div>
-            <button class="btn btn-primary btn-lg new-discussion-btn" data-bs-toggle="modal" data-bs-target="#newDiscussionModal">
-                New Discussion
-            </button>
+            <?php if (!$isGuest): ?>
+                <button class="btn btn-primary btn-lg new-discussion-btn" data-bs-toggle="modal" data-bs-target="#newDiscussionModal">
+                    New Discussion
+                </button>
+            <?php else: ?>
+                <a href="../signin.php" class="btn btn-outline-primary btn-lg">
+                    Sign in to participate
+                </a>
+            <?php endif; ?>
         </div>
     </div>
+    <?php if ($isGuest): ?>
+        <div class="alert alert-info mb-4">
+            Guest mode can view one forum post only. Likes, comments, posting, editing, deleting, and reporting are disabled.
+        </div>
+    <?php endif; ?>
+
     <div class="search-section mb-4">
         <div class="search-box">
             <i class="fas fa-search search-icon"></i>
@@ -176,6 +196,7 @@ if (empty($initials)) $initials = 'U';
     let currentCategory = 'all';
     let searchTerm = '';
     let currentUserId = <?php echo $userId; ?>;
+    const IS_GUEST = <?php echo $isGuest ? 'true' : 'false'; ?>;
     let isAdmin = <?php echo $isAdmin ? 'true' : 'false'; ?>;
     const categoryColors = {
         'BioChemistry': '#dc3545',
@@ -198,6 +219,54 @@ if (empty($initials)) $initials = 'U';
         new bootstrap.Modal(document.getElementById(id)).show();
     }
 
+    function renderGuestLockedPreview(list, count = 3) {
+        if (!IS_GUEST || !list) return;
+
+        const previewItems = Array.from({ length: count }, (_, idx) => `
+            <div class="discussion-card guest-restricted-card" aria-hidden="true">
+                <div class="guest-blur-content">
+                    <div class="discussion-header d-flex justify-content-between align-items-start">
+                        <div class="category-badges">
+                            <span class="badge topic-badge guest-fake-badge">${idx === 0 ? 'Organic Chemistry' : idx === 1 ? 'Exam Preparation' : 'Physical Chemistry'}</span>
+                        </div>
+                        <i class="fas fa-ellipsis-v text-muted"></i>
+                    </div>
+                    <h5 class="discussion-title mt-3">${idx === 0 ? 'Sample discussion title hidden for guests' : idx === 1 ? 'Question preview hidden until sign in' : 'Community post locked'}</h5>
+                    <p class="guest-fake-lines mb-3"></p>
+                    <div class="discussion-meta">
+                        <div class="author-info">
+                            <div class="avatar-wrapper"><div class="author-avatar">U</div></div>
+                            <div class="author-details">
+                                <span class="author-name">ChemEase User</span>
+                                <span class="post-time">• Recent</span>
+                            </div>
+                        </div>
+                        <div class="engagement-stats">
+                            <div class="stat-item"><i class="fas fa-comment"></i> ${idx + 2}</div>
+                            <div class="stat-item"><i class="fas fa-eye"></i> ${24 + idx * 9}</div>
+                            <div class="stat-item"><i class="far fa-heart"></i> ${idx + 4}</div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="guest-restriction-overlay">
+                    <div class="guest-restriction-card">
+                        <div class="guest-lock-icon"><i class="fas fa-lock"></i></div>
+                        <strong>More discussions are locked</strong>
+                        <p>Guest mode shows one forum post only. Sign in to browse all posts, like, and reply.</p>
+                        <a href="../signin.php" class="btn btn-primary btn-sm">Sign in for full forum access</a>
+                    </div>
+                </div>
+            </div>
+        `).join('');
+
+        list.insertAdjacentHTML('beforeend', `
+            <div class="guest-forum-preview-lock">
+                ${previewItems}
+            </div>
+        `);
+    }
+
     function loadDiscussions(replace = true) {
         const url = `../partial/forum_handler.php?action=get_threads&filter=${currentCategory}&search=${encodeURIComponent(searchTerm)}&offset=${offset}`;
        
@@ -210,7 +279,10 @@ if (empty($initials)) $initials = 'U';
                     offset = 0;
                 }
                 if (data.length === 0 && replace) {
-                    list.innerHTML = '<div class="text-center py-5"><i class="fas fa-comments fa-3x text-muted mb-3"></i><p class="text-muted">No discussions found.</p></div>';
+                    list.innerHTML = IS_GUEST
+                        ? '<div class="text-center py-4"><i class="fas fa-lock fa-2x text-muted mb-3"></i><p class="text-muted mb-0">No unlocked forum post matches this filter.</p><small class="text-muted">Sign in to search and browse the full community.</small></div>'
+                        : '<div class="text-center py-5"><i class="fas fa-comments fa-3x text-muted mb-3"></i><p class="text-muted">No discussions found.</p></div>';
+                    if (IS_GUEST) renderGuestLockedPreview(list, 3);
                     document.getElementById('loadMoreBtn').style.display = 'none';
                     return;
                 }
@@ -305,7 +377,7 @@ if (empty($initials)) $initials = 'U';
                                             <i class="fas fa-comment"></i> ${t.replies || 0}
                                         </div>
                                         <div class="stat-item"><i class="fas fa-eye"></i> ${t.views || 0}</div>
-                                        <div class="stat-item like-btn ${t.liked ? 'text-danger' : ''}" data-id="${t.id}">
+                                        <div class="stat-item ${IS_GUEST ? 'guest-like-disabled' : 'like-btn'} ${t.liked ? 'text-danger' : ''}" data-id="${t.id}" title="${IS_GUEST ? 'Sign in to like posts' : ''}">
                                             <i class="fa${t.liked ? 's' : 'r'} fa-heart"></i> <span class="like-count">${t.likes_count || 0}</span>
                                         </div>
                                     </div>
@@ -315,8 +387,12 @@ if (empty($initials)) $initials = 'U';
 
                     list.innerHTML += cardHTML;
                 });
+                if (IS_GUEST && replace) {
+                    renderGuestLockedPreview(list, 3);
+                }
+
                 offset += data.length;
-                document.getElementById('loadMoreBtn').style.display = data.length < 10 ? 'none' : 'block';
+                document.getElementById('loadMoreBtn').style.display = (IS_GUEST || data.length < 10) ? 'none' : 'block';
             });
     }
 
@@ -390,7 +466,7 @@ if (empty($initials)) $initials = 'U';
                                         <small class="text-muted">${new Date(r.created_at).toLocaleString()}</small>
                                     </div>
                                 </div>
-                                ${isOwnReply || isAdmin ? `
+                                ${(!IS_GUEST && (isOwnReply || isAdmin)) ? `
                                     <button class="btn btn-sm btn-outline-danger" onclick="deleteReply(${r.id}, ${threadId})">Delete</button>
                                 ` : ''}
                             </div>
@@ -398,8 +474,10 @@ if (empty($initials)) $initials = 'U';
                         </div>`;
                 });
                
-                // Allow replies if NOT flagged AND (NOT closed OR admin)
-                if (!isFlagged && (!isClosed || isAdmin)) {
+                // Allow replies if NOT flagged AND (NOT closed OR admin), but never for guests.
+                if (IS_GUEST) {
+                    html += `<div class="alert alert-info mt-4">Guest mode is read-only. Please sign in to reply, like, or create discussions.</div>`;
+                } else if (!isFlagged && (!isClosed || isAdmin)) {
                     html += `
                         <div class="mt-4">
                             <textarea class="form-control" id="replyContent" rows="3" placeholder="Write a reply..."></textarea>
@@ -416,6 +494,7 @@ if (empty($initials)) $initials = 'U';
     }
 
     function flagThread(threadId, flagValue) {
+        if (IS_GUEST) { alert('Guest mode is read-only. Please sign in to interact.'); return; }
         const message = flagValue
             ? 'Flag this post for violating community guidelines? The post owner will be notified.'
             : 'Remove flag from this post?';
@@ -439,6 +518,7 @@ if (empty($initials)) $initials = 'U';
     }
 
     function toggleClose(threadId, closeValue) {
+        if (IS_GUEST) { alert('Guest mode is read-only. Please sign in to interact.'); return; }
         if (!confirm(closeValue ? 'Close this thread?' : 'Reopen this thread?')) return;
        
         fetch('../partial/forum_handler.php', {
@@ -451,6 +531,7 @@ if (empty($initials)) $initials = 'U';
     }
 
     function deleteThread(id) {
+        if (IS_GUEST) { alert('Guest mode is read-only. Please sign in to interact.'); return; }
         if (!confirm('Delete this discussion permanently? This cannot be undone.')) return;
        
         fetch('../partial/forum_handler.php', {
@@ -469,6 +550,7 @@ if (empty($initials)) $initials = 'U';
     }
 
     function postReply(threadId) {
+        if (IS_GUEST) { alert('Guest mode is read-only. Please sign in to reply.'); return; }
         const content = document.getElementById('replyContent').value.trim();
         if (!content) {
             alert('Please enter a reply.');
@@ -492,6 +574,7 @@ if (empty($initials)) $initials = 'U';
     }
 
     function deleteReply(replyId, threadId) {
+        if (IS_GUEST) { alert('Guest mode is read-only. Please sign in to interact.'); return; }
         if (!confirm('Delete this reply permanently?')) return;
        
         fetch('../partial/forum_handler.php', {
@@ -507,6 +590,7 @@ if (empty($initials)) $initials = 'U';
         const likeBtn = e.target.closest('.like-btn');
         if (likeBtn) {
             e.stopPropagation();
+            if (IS_GUEST) { alert('Guest mode is read-only. Please sign in to like posts.'); return; }
             const id = likeBtn.dataset.id;
             fetch('../partial/forum_handler.php', {
                 method: 'POST',
@@ -552,8 +636,9 @@ if (empty($initials)) $initials = 'U';
     document.getElementById('loadMoreBtn').addEventListener('click', () => loadDiscussions(false));
 
     // New discussion form
-    document.getElementById('newDiscussionForm').addEventListener('submit', e => {
+    document.getElementById('newDiscussionForm')?.addEventListener('submit', e => {
         e.preventDefault();
+        if (IS_GUEST) { alert('Guest mode is read-only. Please sign in to post.'); return; }
         const form = new FormData(e.target);
         form.append('action', 'create_thread');
        
@@ -569,8 +654,9 @@ if (empty($initials)) $initials = 'U';
     });
 
     // Edit thread form
-    document.getElementById('editThreadForm').addEventListener('submit', e => {
+    document.getElementById('editThreadForm')?.addEventListener('submit', e => {
         e.preventDefault();
+        if (IS_GUEST) { alert('Guest mode is read-only. Please sign in to edit.'); return; }
         const form = new FormData(e.target);
         form.append('action', 'update_thread');
        
@@ -824,6 +910,83 @@ padding: 1rem; max-width: 1400px; margin: 0 auto;
     .stat-item i {
         font-size: 0.8rem;
     }
+    .guest-like-disabled {
+        opacity: .65;
+        cursor: not-allowed;
+    }
+
+    .guest-forum-preview-lock {
+        display: flex;
+        flex-direction: column;
+        gap: 1rem;
+        margin-top: 1rem;
+    }
+
+    .guest-restricted-card {
+        position: relative;
+        overflow: hidden;
+        min-height: 170px;
+        border: 1px solid rgba(23, 162, 184, 0.15);
+        background: rgba(255, 255, 255, 0.92);
+    }
+
+    .guest-blur-content {
+        filter: blur(5px);
+        opacity: 0.72;
+        pointer-events: none;
+        user-select: none;
+    }
+
+    .guest-restriction-overlay {
+        position: absolute;
+        inset: 0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 1rem;
+        background: linear-gradient(135deg, rgba(255,255,255,0.40), rgba(255,255,255,0.94));
+        backdrop-filter: blur(2px);
+    }
+
+    .guest-restriction-card {
+        max-width: 420px;
+        text-align: center;
+        background: rgba(255,255,255,0.96);
+        border: 1px solid rgba(23, 162, 184, 0.18);
+        border-radius: 16px;
+        padding: 1rem 1.25rem;
+        box-shadow: 0 12px 30px rgba(23, 162, 184, 0.14);
+    }
+
+    .guest-restriction-card p {
+        color: #64748b;
+        font-size: 0.9rem;
+        margin: 0.35rem 0 0.85rem;
+    }
+
+    .guest-lock-icon {
+        width: 42px;
+        height: 42px;
+        border-radius: 999px;
+        background: linear-gradient(135deg, var(--primary-blue), var(--gradient-end));
+        color: #fff;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        margin-bottom: 0.55rem;
+        box-shadow: 0 8px 18px rgba(23, 162, 184, 0.22);
+    }
+
+    .guest-fake-badge {
+        background: #94a3b8 !important;
+    }
+
+    .guest-fake-lines {
+        height: 36px;
+        border-radius: 10px;
+        background: linear-gradient(90deg, #e2e8f0 0%, #f8fafc 48%, #e2e8f0 100%);
+    }
+
     .like-btn {
         cursor: pointer;
         transition: all 0.3s;

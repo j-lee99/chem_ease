@@ -1,5 +1,6 @@
 <?php
 /*  calculator.php  –  Scientific Calculator for ChemEase  */
+require_once '../partial/system_settings_bootstrap.php';
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -112,6 +113,13 @@
     </style>
 </head>
 <body>
+    
+    <?php if (!empty($systemSettings['site_banner_enabled']) && !empty($systemSettings['site_banner_message'])): ?>
+    <div class="alert alert-warning text-center mb-0 rounded-0">
+        <i class="fas fa-bullhorn me-2"></i>
+        <?= htmlspecialchars($systemSettings['site_banner_message']) ?>
+    </div>
+<?php endif; ?>
 
 <div class="container py-4">
     <div class="calc-container">

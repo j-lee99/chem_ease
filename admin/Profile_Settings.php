@@ -1,17 +1,24 @@
 <?php
-// profile_settings.php
+session_start();
 require_once '../partial/db_conn.php';
 require_once '../partial/system_settings_bootstrap.php';
-// session_start();
 
-if (!isset($_SESSION['user_id'])) {
-    header('Location: ../signin.php');
+$role = $_SESSION['role'] ?? '';
+$isAdmin = ($role === 'admin');
+$isSuperAdmin = ($role === 'super_admin');
+
+if (!isset($_SESSION['user_id']) || !in_array($role, ['admin', 'super_admin'], true)) {
+    header('Location: ../index.php');
     exit;
 }
 
 $user_id = $_SESSION['user_id'];
 
-$stmt = $conn->prepare("SELECT full_name, email, mobile, birthday, address, profile_image FROM users WHERE id = ? AND is_deleted = 0");
+$stmt = $conn->prepare("
+    SELECT full_name, email, mobile, birthday, address, profile_image
+    FROM users
+    WHERE id = ? AND is_deleted = 0
+");
 $stmt->bind_param("i", $user_id);
 $stmt->execute();
 $result = $stmt->get_result();
@@ -24,14 +31,13 @@ if (!$user) {
     exit;
 }
 
-$full_name = $user['full_name'];
-$email = $user['email'];
+$full_name = $user['full_name'] ?? 'Admin User';
+$email = $user['email'] ?? '';
 $profile_image = $user['profile_image'] ?? '';
-$mobile = $user['mobile'] ?? 'N/A';
-$address = $user['address'] ?? 'N/A';
-$birthday = $user['birthday'] ?? 'N/A';
+$mobile = $user['mobile'] ?? '';
+$address = $user['address'] ?? '';
+$birthday = $user['birthday'] ?? '';
 
-// Get initials for fallback avatar
 $initials = '';
 $name_parts = explode(' ', trim($full_name));
 foreach ($name_parts as $part) {
@@ -40,18 +46,21 @@ foreach ($name_parts as $part) {
     }
     if (strlen($initials) >= 2) break;
 }
-if (empty($initials)) $initials = 'U';
+if (empty($initials)) $initials = 'A';
+
+$pageTitle = $isSuperAdmin ? 'ChemEase - Super Admin Profile Settings' : 'ChemEase - Admin Profile Settings';
+$panelLabel = $isSuperAdmin ? 'SUPER ADMIN PANEL' : 'ADMIN PANEL';
 ?>
 
 <!DOCTYPE html>
 <html lang="en">
-
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>ChemEase - Profile Settings</title>
+    <title><?= htmlspecialchars($pageTitle) ?></title>
     <link href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.0/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+
     <style>
         :root {
             --primary-blue: #17a2b8;
@@ -72,10 +81,52 @@ if (empty($initials)) $initials = 'U';
             color: var(--dark-text);
         }
 
+        .admin-topbar {
+            background: var(--primary-blue);
+            color: white;
+            padding: 14px 22px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+        }
+
+        .admin-topbar .left-group {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .admin-topbar .panel-title {
+            font-size: 1rem;
+            font-weight: 700;
+            margin: 0;
+            letter-spacing: 0.3px;
+        }
+
+        .back-btn {
+            border: 1px solid rgba(255,255,255,0.45);
+            color: white;
+            text-decoration: none;
+            padding: 8px 14px;
+            border-radius: 8px;
+            font-size: 0.9rem;
+            font-weight: 500;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            transition: all 0.2s ease;
+        }
+
+        .back-btn:hover {
+            background: rgba(255,255,255,0.12);
+            color: white;
+        }
+
         .settings-container {
-            max-width: 900px;
+            max-width: 980px;
             margin: 0 auto;
-            padding: 2rem 1rem;
+            padding: 2rem 1rem 3rem;
         }
 
         .page-header {
@@ -285,10 +336,9 @@ if (empty($initials)) $initials = 'U';
             min-width: 60px;
         }
 
-        /* MOBILE RESPONSIVENESS */
         @media (max-width: 767px) {
             .settings-container {
-                padding: 1.5rem 0.9rem;
+                padding: 1.5rem 0.9rem 2rem;
             }
 
             .settings-title {
@@ -331,6 +381,12 @@ if (empty($initials)) $initials = 'U';
                 letter-spacing: 0.9rem;
                 height: 80px;
             }
+
+            .admin-topbar {
+                flex-direction: column;
+                align-items: flex-start;
+                gap: 10px;
+            }
         }
 
         @media (max-width: 576px) {
@@ -353,17 +409,33 @@ if (empty($initials)) $initials = 'U';
 </head>
 
 <body>
-    
+
     <?php if (!empty($systemSettings['site_banner_enabled']) && !empty($systemSettings['site_banner_message'])): ?>
-    <div class="alert alert-warning text-center mb-0 rounded-0">
-        <i class="fas fa-bullhorn me-2"></i>
-        <?= htmlspecialchars($systemSettings['site_banner_message']) ?>
+        <div class="alert alert-warning text-center mb-0 rounded-0">
+            <i class="fas fa-bullhorn me-2"></i>
+            <?= htmlspecialchars($systemSettings['site_banner_message']) ?>
+        </div>
+    <?php endif; ?>
+
+    <div class="admin-topbar">
+        <div class="left-group">
+            <a href="index.php" class="back-btn">
+                <i class="fas fa-arrow-left"></i>
+                Back to Dashboard
+            </a>
+            <h1 class="panel-title"><?= htmlspecialchars($panelLabel) ?></h1>
+        </div>
+
+        <a href="../partial/logout.php" class="back-btn">
+            <i class="fas fa-sign-out-alt"></i>
+            Logout
+        </a>
     </div>
-<?php endif; ?>
+
     <div class="settings-container">
         <div class="page-header text-center mb-5">
             <h1 class="settings-title">Profile Settings</h1>
-            <p class="text-muted">Manage your account information and preferences</p>
+            <p class="text-muted">Manage your admin account information and preferences</p>
         </div>
 
         <div class="settings-card mb-4">
@@ -379,31 +451,36 @@ if (empty($initials)) $initials = 'U';
                 <div class="profile-info">
                     <div class="profile-avatar-container">
                         <?php if ($profile_image && file_exists('../' . $profile_image)): ?>
-                            <img src="../<?php echo htmlspecialchars($profile_image); ?>?t=<?php echo time(); ?>" alt="Profile" class="profile-avatar" id="mainProfileImage">
+                            <img src="../<?= htmlspecialchars($profile_image) ?>?t=<?= time() ?>" alt="Profile" class="profile-avatar" id="mainProfileImage">
                         <?php else: ?>
-                            <div class="default-avatar" id="mainProfileAvatar"><?php echo htmlspecialchars($initials); ?></div>
+                            <div class="default-avatar" id="mainProfileAvatar"><?= htmlspecialchars($initials) ?></div>
                         <?php endif; ?>
                     </div>
+
                     <div class="profile-details">
                         <div class="profile-field">
                             <label class="field-label">Full Name</label>
-                            <div class="field-value" id="displayFullName"><?php echo htmlspecialchars($full_name); ?></div>
+                            <div class="field-value" id="displayFullName"><?= htmlspecialchars($full_name) ?></div>
                         </div>
                         <div class="profile-field">
                             <label class="field-label">Email Address</label>
-                            <div class="field-value" id="displayEmail"><?php echo htmlspecialchars($email); ?></div>
+                            <div class="field-value" id="displayEmail"><?= htmlspecialchars($email) ?></div>
                         </div>
                         <div class="profile-field">
                             <label class="field-label">Mobile Number</label>
-                            <div class="field-value" id="displayMobile"><?php echo htmlspecialchars($mobile); ?></div>
+                            <div class="field-value" id="displayMobile"><?= htmlspecialchars($mobile ?: 'N/A') ?></div>
                         </div>
                         <div class="profile-field">
                             <label class="field-label">Birthday</label>
-                            <div class="field-value" id="displayBirthday"><?php echo htmlspecialchars($birthday); ?></div>
+                            <div class="field-value" id="displayBirthday"><?= htmlspecialchars($birthday ?: 'N/A') ?></div>
                         </div>
                         <div class="profile-field">
                             <label class="field-label">Address</label>
-                            <div class="field-value" id="displayAddress"><?php echo htmlspecialchars($address); ?></div>
+                            <div class="field-value" id="displayAddress"><?= htmlspecialchars($address ?: 'N/A') ?></div>
+                        </div>
+                        <div class="profile-field">
+                            <label class="field-label">Role</label>
+                            <div class="field-value"><?= $isSuperAdmin ? 'Super Admin' : 'Admin' ?></div>
                         </div>
                     </div>
                 </div>
@@ -420,7 +497,7 @@ if (empty($initials)) $initials = 'U';
                 </div>
             </div>
             <div class="card-body">
-                <p class="text-muted">Your password is encrypted and secure.</p>
+                <p class="text-muted mb-0">Your administrator password is encrypted and secure.</p>
             </div>
         </div>
 
@@ -432,7 +509,9 @@ if (empty($initials)) $initials = 'U';
                 <div class="danger-item">
                     <div class="danger-info">
                         <label class="field-label text-danger">Delete Account</label>
-                        <p class="danger-description">Permanently delete your account and all associated data. This cannot be undone.</p>
+                        <p class="danger-description">
+                            Permanently delete your admin account and all associated data. This cannot be undone.
+                        </p>
                     </div>
                     <button class="btn btn-outline-danger" data-bs-toggle="modal" data-bs-target="#deleteAccountModal">
                         Delete Account
@@ -442,7 +521,6 @@ if (empty($initials)) $initials = 'U';
         </div>
     </div>
 
-    <!-- Edit Profile Modal -->
     <div class="modal fade" id="editProfileModal" tabindex="-1" aria-labelledby="editProfileModalLabel" aria-hidden="true">
         <div class="modal-dialog modal-lg">
             <div class="modal-content">
@@ -450,16 +528,18 @@ if (empty($initials)) $initials = 'U';
                     <h5 class="modal-title" id="editProfileModalLabel">Edit Profile</h5>
                     <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
                 </div>
+
                 <div class="modal-body">
                     <form id="editProfileForm" enctype="multipart/form-data">
                         <div class="text-center mb-4">
                             <div class="position-relative d-inline-block">
                                 <?php if ($profile_image && file_exists('../' . $profile_image)): ?>
-                                    <img src="../<?php echo htmlspecialchars($profile_image); ?>?t=<?php echo time(); ?>" alt="Current" id="currentImagePreview" class="profile-avatar">
+                                    <img src="../<?= htmlspecialchars($profile_image) ?>?t=<?= time() ?>" alt="Current" id="currentImagePreview" class="profile-avatar">
                                 <?php else: ?>
-                                    <div class="default-avatar" id="currentImagePreview"><?php echo htmlspecialchars($initials); ?></div>
+                                    <div class="default-avatar" id="currentImagePreview"><?= htmlspecialchars($initials) ?></div>
                                 <?php endif; ?>
                             </div>
+
                             <div class="mt-3">
                                 <label for="profile_image" class="btn btn-outline-primary btn-sm">Change Photo</label>
                                 <input type="file" id="profile_image" name="profile_image" accept="image/*" style="display:none;">
@@ -468,40 +548,53 @@ if (empty($initials)) $initials = 'U';
                             </div>
                         </div>
 
+                        <?php
+                        $fullNameParts = preg_split('/\s+/', trim($full_name), 2);
+                        $firstName = $fullNameParts[0] ?? '';
+                        $lastName = $fullNameParts[1] ?? '';
+                        ?>
+
                         <div class="row g-3">
                             <div class="col-md-6">
                                 <label class="form-label">First Name</label>
-                                <input type="text" class="form-control" id="editFirstName" value="<?php echo htmlspecialchars(explode(' ', $full_name)[0]); ?>" required>
+                                <input type="text" class="form-control" id="editFirstName" value="<?= htmlspecialchars($firstName) ?>" required>
                             </div>
                             <div class="col-md-6">
                                 <label class="form-label">Last Name</label>
-                                <input type="text" class="form-control" id="editLastName" value="<?php echo htmlspecialchars(count(explode(' ', $full_name)) > 1 ? explode(' ', $full_name)[1] : ''); ?>">
+                                <input type="text" class="form-control" id="editLastName" value="<?= htmlspecialchars($lastName) ?>">
                             </div>
                         </div>
 
                         <div class="mb-3 mt-3">
                             <label class="form-label">Email</label>
-                            <input type="email" class="form-control" id="editEmail" value="<?php echo htmlspecialchars($email); ?>" required>
+                            <input type="email" class="form-control" id="editEmail" value="<?= htmlspecialchars($email) ?>" required>
                         </div>
+
                         <div class="mb-3">
                             <label class="form-label">Mobile</label>
-                            <input type="text" class="form-control" id="editMobile" value="<?php echo htmlspecialchars($mobile); ?>">
+                            <input type="text" class="form-control" id="editMobile" value="<?= htmlspecialchars($mobile) ?>">
                         </div>
+
                         <div class="mb-3">
                             <label class="form-label">Birthday</label>
-                            <input type="date" class="form-control" id="editBirthday" value="<?php echo htmlspecialchars($birthday); ?>">
+                            <input type="date" class="form-control" id="editBirthday" value="<?= htmlspecialchars($birthday) ?>">
                         </div>
+
                         <div class="mb-3">
                             <label class="form-label">Address</label>
-                            <textarea class="form-control" id="editAddress" rows="2"><?php echo htmlspecialchars($address); ?></textarea>
+                            <textarea class="form-control" id="editAddress" rows="2"><?= htmlspecialchars($address) ?></textarea>
                         </div>
                     </form>
                 </div>
+
                 <div class="modal-footer">
                     <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-                    <button type="button" class="btn btn-primary"
+                    <button
+                        type="button"
+                        class="btn btn-primary"
                         style="background-color: var(--primary-blue); border-color: var(--primary-blue);"
-                        onclick="updateProfile()">
+                        onclick="updateProfile()"
+                    >
                         Save Changes
                     </button>
                 </div>
@@ -509,7 +602,6 @@ if (empty($initials)) $initials = 'U';
         </div>
     </div>
 
-    <!-- Change Password Modal -->
     <div class="modal fade" id="changePasswordModal" tabindex="-1" aria-labelledby="changePasswordModalLabel" aria-hidden="true">
         <div class="modal-dialog">
             <div class="modal-content">
@@ -517,6 +609,7 @@ if (empty($initials)) $initials = 'U';
                     <h5 class="modal-title" id="changePasswordModalLabel">Change Password</h5>
                     <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
                 </div>
+
                 <div class="modal-body">
                     <form id="changePasswordForm">
                         <div class="mb-4">
@@ -528,6 +621,7 @@ if (empty($initials)) $initials = 'U';
                                 </button>
                             </div>
                         </div>
+
                         <div class="mb-4">
                             <label class="form-label fw-bold">New Password</label>
                             <div class="password-container">
@@ -536,14 +630,17 @@ if (empty($initials)) $initials = 'U';
                                     <i class="fas fa-eye" id="newPasswordIcon"></i>
                                 </button>
                             </div>
+
                             <div class="password-strength" id="passwordStrengthContainer">
                                 <div class="strength-bar">
                                     <div class="strength-bar-fill" id="strengthBar"></div>
                                 </div>
                                 <span class="strength-text" id="strengthText"></span>
                             </div>
+
                             <div class="invalid-feedback d-block" id="newPasswordFeedback"></div>
                         </div>
+
                         <div class="mb-4">
                             <label class="form-label fw-bold">Confirm New Password</label>
                             <div class="password-container">
@@ -556,6 +653,7 @@ if (empty($initials)) $initials = 'U';
                         </div>
                     </form>
                 </div>
+
                 <div class="modal-footer">
                     <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
                     <button type="button" class="btn btn-primary" style="background-color: var(--primary-blue); border-color: var(--primary-blue);" onclick="preparePasswordChange()">
@@ -566,17 +664,18 @@ if (empty($initials)) $initials = 'U';
         </div>
     </div>
 
-    <!-- OTP Verification Modal for Password Change -->
     <div class="modal fade" id="otpPasswordModal" tabindex="-1" aria-labelledby="otpPasswordModalLabel" aria-hidden="true" data-bs-backdrop="static" data-bs-keyboard="false">
         <div class="modal-dialog modal-dialog-centered">
             <div class="modal-content">
                 <div class="modal-header" style="background-color: var(--primary-blue); color: white;">
                     <h5 class="modal-title" id="otpPasswordModalLabel">Verify Password Change</h5>
                 </div>
+
                 <div class="modal-body">
                     <p class="text-center mb-4">We sent a 6-digit code to your email.</p>
                     <div class="otp-container">
-                        <input type="text"
+                        <input
+                            type="text"
                             class="form-control otp-input"
                             id="otpPasswordInput"
                             maxlength="6"
@@ -584,12 +683,14 @@ if (empty($initials)) $initials = 'U';
                             autocomplete="off"
                             inputmode="numeric"
                             pattern="[0-9]*"
-                            required>
+                            required
+                        >
                     </div>
                     <small class="text-muted d-block text-center mt-3">
                         Enter the 6-digit code (check spam/junk folder if needed)
                     </small>
                 </div>
+
                 <div class="modal-footer">
                     <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
                     <button type="button" class="btn btn-primary px-5" style="background-color: var(--primary-blue); border-color: var(--primary-blue);" onclick="verifyPasswordOtp()">
@@ -600,7 +701,6 @@ if (empty($initials)) $initials = 'U';
         </div>
     </div>
 
-    <!-- Delete Account Modal -->
     <div class="modal fade" id="deleteAccountModal" tabindex="-1" aria-labelledby="deleteAccountModalLabel" aria-hidden="true">
         <div class="modal-dialog">
             <div class="modal-content">
@@ -608,6 +708,7 @@ if (empty($initials)) $initials = 'U';
                     <h5 class="modal-title" id="deleteAccountModalLabel">Delete Account</h5>
                     <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
                 </div>
+
                 <div class="modal-body">
                     <div class="alert alert-danger">
                         <strong>Warning!</strong> This action is permanent and cannot be undone.
@@ -615,6 +716,7 @@ if (empty($initials)) $initials = 'U';
                     <p>Please enter your <strong>current password</strong> to confirm:</p>
                     <input type="password" class="form-control" id="deletePasswordConfirm" placeholder="Your password">
                 </div>
+
                 <div class="modal-footer">
                     <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
                     <button type="button" class="btn btn-danger" id="confirmDeleteBtn" disabled onclick="deleteAccount()">
@@ -625,8 +727,9 @@ if (empty($initials)) $initials = 'U';
         </div>
     </div>
 
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.0/js/bootstrap.bundle.min.js"></script>
+
     <script>
-        // Toast notification
         function showToast(message, type = 'info') {
             const toast = document.createElement('div');
             toast.className = `alert alert-${type} position-fixed`;
@@ -636,10 +739,10 @@ if (empty($initials)) $initials = 'U';
             setTimeout(() => toast.remove(), 6000);
         }
 
-        // Password visibility toggle
         function togglePassword(id) {
             const field = document.getElementById(id);
             const icon = document.getElementById(id + 'Icon');
+
             if (field.type === 'password') {
                 field.type = 'text';
                 icon.classList.replace('fa-eye', 'fa-eye-slash');
@@ -649,7 +752,6 @@ if (empty($initials)) $initials = 'U';
             }
         }
 
-        // Password strength calculator
         function calculatePasswordStrength(password) {
             let score = 0;
             if (password.length >= 8) score++;
@@ -658,27 +760,18 @@ if (empty($initials)) $initials = 'U';
             if (/[A-Z]/.test(password)) score++;
             if (/[0-9]/.test(password)) score++;
             if (/[^a-zA-Z0-9]/.test(password)) score++;
-            if (score <= 2) return {
-                level: 'weak',
-                text: 'Weak',
-                color: '#dc3545',
-                width: '33%'
-            };
-            if (score <= 4) return {
-                level: 'medium',
-                text: 'Medium',
-                color: '#ffc107',
-                width: '66%'
-            };
-            return {
-                level: 'strong',
-                text: 'Strong',
-                color: '#28a745',
-                width: '100%'
-            };
+
+            if (score <= 2) {
+                return { level: 'weak', text: 'Weak', color: '#dc3545', width: '33%' };
+            }
+
+            if (score <= 4) {
+                return { level: 'medium', text: 'Medium', color: '#ffc107', width: '66%' };
+            }
+
+            return { level: 'strong', text: 'Strong', color: '#28a745', width: '100%' };
         }
 
-        // DOM ready
         document.addEventListener('DOMContentLoaded', function() {
             const newPass = document.getElementById('newPassword');
             const confirmPass = document.getElementById('confirmPassword');
@@ -692,15 +785,18 @@ if (empty($initials)) $initials = 'U';
                 newPass.addEventListener('input', function() {
                     const val = this.value;
                     newFeedback.textContent = '';
+
                     if (!val) {
                         strengthContainer.style.display = 'none';
                         return;
                     }
+
                     strengthContainer.style.display = 'flex';
                     const st = calculatePasswordStrength(val);
                     strengthBar.style.width = st.width;
                     strengthBar.style.backgroundColor = st.color;
                     strengthText.textContent = st.text;
+
                     if (val.length < 8) {
                         newFeedback.textContent = 'At least 8 characters required';
                     } else if (!/[A-Z]/.test(val) || !/[a-z]/.test(val) || !/[0-9]/.test(val) || !/[^a-zA-Z0-9]/.test(val)) {
@@ -716,19 +812,19 @@ if (empty($initials)) $initials = 'U';
                 });
             }
 
-            // Enable delete button only when password entered
             document.getElementById('deletePasswordConfirm')?.addEventListener('input', function() {
                 document.getElementById('confirmDeleteBtn').disabled = !this.value.trim();
             });
 
-            // Profile image preview
             document.getElementById('profile_image')?.addEventListener('change', function(e) {
                 const file = e.target.files[0];
                 const preview = document.getElementById('imagePreview');
+
                 if (!file) {
                     preview.style.display = 'none';
                     return;
                 }
+
                 const ext = file.name.split('.').pop().toLowerCase();
                 if (!['jpg', 'jpeg', 'png', 'gif'].includes(ext)) {
                     showToast('Only JPG, JPEG, PNG, GIF allowed', 'danger');
@@ -736,6 +832,7 @@ if (empty($initials)) $initials = 'U';
                     preview.style.display = 'none';
                     return;
                 }
+
                 const reader = new FileReader();
                 reader.onload = ev => {
                     preview.src = ev.target.result;
@@ -743,14 +840,6 @@ if (empty($initials)) $initials = 'U';
                 };
                 reader.readAsDataURL(file);
             });
-
-            // OTP input - only numbers
-            const otpInput = document.getElementById('otpInput');
-            if (otpInput) {
-                otpInput.addEventListener('input', function() {
-                    this.value = this.value.replace(/[^0-9]/g, '').slice(0, 6);
-                });
-            }
 
             const otpPasswordInput = document.getElementById('otpPasswordInput');
             if (otpPasswordInput) {
@@ -783,14 +872,19 @@ if (empty($initials)) $initials = 'U';
             formData.append('mobile', mobile);
             formData.append('birthday', birthday);
             formData.append('address', address);
-            if (fileInput.files?.[0]) formData.append('profile_image', fileInput.files[0]);
+
+            if (fileInput.files?.[0]) {
+                formData.append('profile_image', fileInput.files[0]);
+            }
 
             try {
                 showToast('Processing...', 'info');
+
                 const res = await fetch('../partial/update_profile.php', {
                     method: 'POST',
                     body: formData
                 });
+
                 const data = await res.json();
 
                 if (!data.success) {
@@ -800,12 +894,11 @@ if (empty($initials)) $initials = 'U';
 
                 showToast('Profile updated successfully', 'success');
 
-                // Update displayed values in main profile
                 document.getElementById('displayFullName').textContent = fullName;
                 document.getElementById('displayEmail').textContent = email;
-                document.getElementById('displayMobile').textContent = mobile;
-                document.getElementById('displayBirthday').textContent = birthday;
-                document.getElementById('displayAddress').textContent = address;
+                document.getElementById('displayMobile').textContent = mobile || 'N/A';
+                document.getElementById('displayBirthday').textContent = birthday || 'N/A';
+                document.getElementById('displayAddress').textContent = address || 'N/A';
 
                 if (data.updated_image) {
                     const container = document.querySelector('.profile-avatar-container');
@@ -819,36 +912,6 @@ if (empty($initials)) $initials = 'U';
             }
         }
 
-
-        // Verify OTP for email change
-        async function verifyNewEmailOtp() {
-            const otp = document.getElementById('otpInput').value.trim();
-            if (otp.length !== 6 || !/^\d{6}$/.test(otp)) {
-                showToast('Enter a valid 6-digit code', 'warning');
-                return;
-            }
-
-            const formData = new FormData();
-            formData.append('action', 'confirm_email_change');
-            formData.append('otp', otp);
-
-            try {
-                const res = await fetch('../partial/update_profile.php', {
-                    method: 'POST',
-                    body: formData
-                });
-                const data = await res.json();
-                showToast(data.message, data.success ? 'success' : 'danger');
-                if (data.success) {
-                    bootstrap.Modal.getInstance(document.getElementById('otpVerifyModal'))?.hide();
-                    setTimeout(() => location.reload(), 1600);
-                }
-            } catch (err) {
-                showToast('Network error – please try again', 'danger');
-            }
-        }
-
-        // Prepare password change → send OTP
         async function preparePasswordChange() {
             const current = document.getElementById('currentPassword').value;
             const newP = document.getElementById('newPassword').value;
@@ -866,10 +929,12 @@ if (empty($initials)) $initials = 'U';
 
             try {
                 showToast('Verifying...', 'info');
+
                 const res = await fetch('../partial/update_profile.php', {
                     method: 'POST',
                     body: formData
                 });
+
                 const data = await res.json();
 
                 if (!data.success) {
@@ -880,6 +945,7 @@ if (empty($initials)) $initials = 'U';
                 if (data.password_change_pending) {
                     showToast('Verification code sent to your email', 'success');
                     bootstrap.Modal.getInstance(document.getElementById('changePasswordModal'))?.hide();
+
                     setTimeout(() => {
                         new bootstrap.Modal(document.getElementById('otpPasswordModal')).show();
                     }, 350);
@@ -889,9 +955,9 @@ if (empty($initials)) $initials = 'U';
             }
         }
 
-        // Verify OTP and update password
         async function verifyPasswordOtp() {
             const otp = document.getElementById('otpPasswordInput').value.trim();
+
             if (otp.length !== 6 || !/^\d{6}$/.test(otp)) {
                 showToast('Enter a valid 6-digit code', 'warning');
                 return;
@@ -906,8 +972,10 @@ if (empty($initials)) $initials = 'U';
                     method: 'POST',
                     body: formData
                 });
+
                 const data = await res.json();
                 showToast(data.message, data.success ? 'success' : 'danger');
+
                 if (data.success) {
                     bootstrap.Modal.getInstance(document.getElementById('otpPasswordModal'))?.hide();
                     setTimeout(() => location.reload(), 1600);
@@ -917,7 +985,6 @@ if (empty($initials)) $initials = 'U';
             }
         }
 
-        // Delete Account
         async function deleteAccount() {
             const pass = document.getElementById('deletePasswordConfirm').value.trim();
             if (!pass) return showToast('Password required', 'warning');
@@ -931,8 +998,10 @@ if (empty($initials)) $initials = 'U';
                     method: 'POST',
                     body: formData
                 });
+
                 const data = await res.json();
                 showToast(data.message, data.success ? 'success' : 'danger');
+
                 if (data.success) {
                     setTimeout(() => window.location.href = '../partial/logout.php', 2200);
                 }
@@ -942,5 +1011,4 @@ if (empty($initials)) $initials = 'U';
         }
     </script>
 </body>
-
 </html>

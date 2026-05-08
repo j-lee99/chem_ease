@@ -222,7 +222,7 @@ if (count($pdfs) > 0) {
             <div class="nav-item"><a href="Practice_Exams.php" class="nav-link"><i class="fas fa-clipboard-list"></i><span>Practice Exams</span></a></div>
             <?php if ($isSuperAdmin): ?>
                 <div class="nav-item"><a href="Discussion_Forums.php" class="nav-link"><i class="fas fa-comments"></i><span>Discussion Forums</span></a></div>
-                <div class="nav-item"><a href="Generate_Reports.php" class="nav-link"><i class="fas fa-file-alt"></i><span>Generate Reports</span></a></div>
+                <div class="nav-item"><a href="Generate_Reports.php" class="nav-link"><i class="fas fa-file-alt"></i><span>Reports & Analytics</span></a></div>
             <?php endif; ?>
         </nav>
     </div>

@@ -6,7 +6,25 @@ header('Content-Type: application/json');
 $user_id = $_SESSION['user_id'] ?? null;
 $user_role = $_SESSION['role'] ?? null;
 $is_admin = ($user_role === 'admin' || $user_role === 'super_admin');
+$is_guest = ($user_role === 'guest');
 $action = $_POST['action'] ?? $_GET['action'] ?? '';
+
+
+function guest_first_thread_id(): int
+{
+    global $conn;
+    $row = $conn->query("SELECT id FROM forum_threads WHERE is_closed = 0 AND is_flagged = 0 ORDER BY created_at DESC, id DESC LIMIT 1")->fetch_assoc();
+    return $row ? (int)$row['id'] : 0;
+}
+
+function require_non_guest_action(): void
+{
+    global $is_guest, $user_id;
+    if ($is_guest || !$user_id) {
+        echo json_encode(['error' => 'Guest mode is view-only for forums. Please sign in to interact.']);
+        exit;
+    }
+}
 
 function query($sql, $params = [])
 {
@@ -25,8 +43,10 @@ switch ($action) {
         $filter = $_GET['filter'] ?? 'all';
         $search = $_GET['search'] ?? '';
         $offset = (int)($_GET['offset'] ?? 0);
-        $limit = 10;
+        $limit = $is_guest ? 1 : 10;
+        if ($is_guest) { $offset = 0; }
         $where = ['t.is_closed = 0'];
+        if ($is_guest) { $where[] = 't.is_flagged = 0'; }
         $params = [];
 
         if ($filter !== 'all') {
@@ -73,6 +93,13 @@ switch ($action) {
 
     case 'view_thread':
         $thread_id = (int)$_GET['id'];
+        if ($is_guest) {
+            $allowedThreadId = guest_first_thread_id();
+            if ($allowedThreadId <= 0 || $thread_id !== $allowedThreadId) {
+                echo json_encode(['error' => 'Guest mode can view one forum post only. Please sign in for full forum access.']);
+                exit;
+            }
+        }
 
         // Fetch thread with profile_image
         $thread = $conn->query("
@@ -101,7 +128,10 @@ switch ($action) {
         ORDER BY r.created_at
     ")->fetch_all(MYSQLI_ASSOC);
 
-        $liked = $conn->query("SELECT 1 FROM forum_likes WHERE thread_id = $thread_id AND user_id = $user_id")->fetch_row();
+        $liked = false;
+        if ($user_id) {
+            $liked = $conn->query("SELECT 1 FROM forum_likes WHERE thread_id = $thread_id AND user_id = $user_id")->fetch_row();
+        }
 
         echo json_encode([
             'thread'  => array_merge($thread, ['liked' => (bool)$liked]),
@@ -110,6 +140,7 @@ switch ($action) {
         break;
 
     case 'create_thread':
+        require_non_guest_action();
         $title = trim($_POST['title']);
         $content = trim($_POST['content']);
         $category = $_POST['category'];
@@ -126,6 +157,7 @@ switch ($action) {
         break;
 
     case 'update_thread':
+        require_non_guest_action();
         $thread_id = (int)$_POST['thread_id'];
         $title = trim($_POST['title'] ?? '');
         $content = trim($_POST['content'] ?? '');
@@ -171,6 +203,7 @@ switch ($action) {
         break;
 
     case 'delete_thread':
+        require_non_guest_action();
         $thread_id = (int)$_POST['id'];
         $check = $conn->query("SELECT user_id FROM forum_threads WHERE id = $thread_id")->fetch_assoc();
 
@@ -185,6 +218,7 @@ switch ($action) {
         break;
 
     case 'flag_thread':
+        require_non_guest_action();
         $thread_id = (int)$_POST['thread_id'];
         $flag = (int)$_POST['flag'];
 
@@ -218,6 +252,7 @@ switch ($action) {
         break;
 
     case 'toggle_close':
+        require_non_guest_action();
         if (!$is_admin) {
             echo json_encode(['error' => 'Unauthorized']);
             exit;
@@ -229,6 +264,7 @@ switch ($action) {
         break;
 
     case 'like_thread':
+        require_non_guest_action();
         $thread_id = (int)$_POST['thread_id'];
 
         if (!$user_id) {
@@ -254,6 +290,7 @@ switch ($action) {
         break;
 
     case 'reply':
+        require_non_guest_action();
         $thread_id = (int)$_POST['thread_id'];
         $content = trim($_POST['content']);
 
@@ -269,6 +306,7 @@ switch ($action) {
         break;
 
     case 'delete_reply':
+        require_non_guest_action();
         $reply_id = (int)$_POST['id'];
         $check = $conn->query("SELECT user_id FROM forum_replies WHERE id = $reply_id")->fetch_assoc();
 

@@ -3,33 +3,47 @@ if (session_status() === PHP_SESSION_NONE) {
     session_start();
 }
 
-if (!isset($_SESSION['user_id']) || !isset($_SESSION['role']) || $_SESSION['role'] !== 'user') {
+$role = (string)($_SESSION['role'] ?? '');
+$isGuestUser = ($role === 'guest');
+
+if (!in_array($role, ['user', 'guest'], true)) {
     header('Location: ../signin.php');
     exit;
 }
 
 require_once '../partial/db_conn.php';
 
-$user_id = $_SESSION['user_id'];
+$user_id = (isset($_SESSION['user_id']) && ctype_digit((string)$_SESSION['user_id']))
+    ? (int)$_SESSION['user_id']
+    : 0;
 
-$stmt = $conn->prepare("
-    SELECT full_name, profile_image 
-    FROM users 
-    WHERE id = ? AND is_deleted = 0
-");
-$stmt->bind_param("i", $user_id);
-$stmt->execute();
-$user = $stmt->get_result()->fetch_assoc();
-$stmt->close();
+$user = null;
+if (!$isGuestUser) {
+    if ($user_id <= 0) {
+        header('Location: ../signin.php');
+        exit;
+    }
 
-if (!$user) {
-    session_destroy();
-    header('Location: ../signin.php');
-    exit;
+    $stmt = $conn->prepare("
+        SELECT full_name, profile_image 
+        FROM users 
+        WHERE id = ? AND is_deleted = 0
+    "
+    );
+    $stmt->bind_param("i", $user_id);
+    $stmt->execute();
+    $user = $stmt->get_result()->fetch_assoc();
+    $stmt->close();
+
+    if (!$user) {
+        session_destroy();
+        header('Location: ../signin.php');
+        exit;
+    }
 }
 
-$full_name     = $user['full_name'];
-$profile_image = $user['profile_image'] ?? '';
+$full_name     = $isGuestUser ? 'Guest User' : ($user['full_name'] ?? 'Student');
+$profile_image = $isGuestUser ? '' : ($user['profile_image'] ?? '');
 
 $_SESSION['full_name']     = $full_name;
 $_SESSION['profile_image'] = $profile_image;
@@ -348,6 +362,27 @@ $page = 'dashboard';
         text-overflow: ellipsis;
     }
 
+
+    .lb-name-private {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.35rem;
+        color: #334155;
+    }
+
+    .lb-avatar-private {
+        background: linear-gradient(135deg, rgba(23, 162, 184, 0.14), rgba(32, 197, 212, 0.2));
+        color: #0f4f5c;
+    }
+
+    .lb-guest-privacy-note {
+        display: block;
+        margin-top: 0.35rem;
+        color: #64748b;
+        font-size: 0.78rem;
+        font-weight: 600;
+    }
+
     .lb-points {
         font-weight: 800;
         color: #fff;
@@ -423,12 +458,119 @@ $page = 'dashboard';
         border-radius: 10px;
         font-weight: 700;
     }
+
+
+    .guest-preview-note {
+        background: rgba(23, 162, 184, 0.08);
+        border: 1px solid rgba(23, 162, 184, 0.18);
+        color: #0f4f5c;
+        border-radius: 12px;
+        padding: 0.9rem 1rem;
+        font-weight: 600;
+        margin-bottom: 1rem;
+    }
+
+    .guest-locked-action {
+        opacity: 0.75;
+        cursor: not-allowed !important;
+        pointer-events: none;
+    }
+
+    .guest-chart-bars {
+        display: grid;
+        grid-template-columns: repeat(5, 1fr);
+        gap: 0.75rem;
+        align-items: end;
+        height: 180px;
+        padding: 1rem;
+        border-radius: 14px;
+        background: linear-gradient(135deg, rgba(23, 162, 184, 0.05), rgba(32, 197, 212, 0.09));
+        border: 1px solid rgba(23, 162, 184, 0.12);
+    }
+
+    .guest-chart-bar {
+        display: flex;
+        flex-direction: column;
+        justify-content: end;
+        align-items: center;
+        gap: 0.5rem;
+        height: 100%;
+        min-width: 0;
+    }
+
+    .guest-chart-fill {
+        width: 100%;
+        max-width: 44px;
+        border-radius: 10px 10px 4px 4px;
+        background: linear-gradient(180deg, var(--gradient-end), var(--primary-blue));
+        box-shadow: 0 8px 18px rgba(23, 162, 184, 0.18);
+    }
+
+    .guest-chart-label {
+        font-size: 0.72rem;
+        font-weight: 700;
+        color: #475569;
+        text-align: center;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        max-width: 100%;
+    }
+
+    /* Guest dashboard restriction blur: keep leaderboard visible, lock personal analytics. */
+    .guest-blur-target {
+        position: relative;
+        overflow: hidden;
+        border-radius: 14px;
+        min-height: 120px;
+    }
+
+    .guest-blur-target > * {
+        filter: blur(5px);
+        opacity: 0.58;
+        pointer-events: none !important;
+        user-select: none;
+    }
+
+    .guest-blur-target::before {
+        content: '';
+        position: absolute;
+        inset: 0;
+        z-index: 8;
+        background: linear-gradient(135deg, rgba(255,255,255,0.45), rgba(232,244,248,0.82));
+        backdrop-filter: blur(1px);
+    }
+
+    .guest-blur-target::after {
+        content: attr(data-guest-message);
+        position: absolute;
+        z-index: 9;
+        left: 50%;
+        top: 50%;
+        transform: translate(-50%, -50%);
+        width: min(92%, 430px);
+        padding: 1rem 1.15rem;
+        border-radius: 14px;
+        background: rgba(255, 255, 255, 0.94);
+        border: 1px solid rgba(23, 162, 184, 0.26);
+        box-shadow: 0 12px 34px rgba(15, 23, 42, 0.12);
+        color: #0f4f5c;
+        font-weight: 800;
+        text-align: center;
+        line-height: 1.45;
+    }
+
+    .guest-blur-target.guest-blur-small::after {
+        font-size: 0.92rem;
+        padding: 0.8rem 1rem;
+    }
+
 </style>
 <div class="row g-4 align-items-stretch">
     <div class="col-lg-8">
         <div class="welcome-section">
-            <h1 class="mb-2">Welcome back, <?php echo htmlspecialchars($_SESSION['full_name'] ?? 'Student'); ?>!</h1>
-            <p class="mb-0 opacity-75">Track your progress and continue your chemistry learning journey.</p>
+            <h1 class="mb-2"><?php echo $isGuestUser ? 'Welcome, Guest!' : 'Welcome back, ' . htmlspecialchars($_SESSION['full_name'] ?? 'Student') . '!'; ?></h1>
+            <p class="mb-0 opacity-75"><?php echo $isGuestUser ? 'Preview the leaderboard and dashboard insights. Sign in to track your own rank and progress.' : 'Track your progress and continue your chemistry learning journey.'; ?></p>
         </div>
 
         <!-- Progress Overview -->
@@ -484,6 +626,11 @@ $page = 'dashboard';
                 <div class="lb-card">
                     <div class="lb-header">
                         <h5 class="lb-title">Top Reviewees</h5>
+                        <?php if ($isGuestUser): ?>
+                            <small class="lb-guest-privacy-note">
+                                <i class="fas fa-user-shield me-1"></i>Names are hidden in guest preview.
+                            </small>
+                        <?php endif; ?>
                     </div>
 
                     <div class="lb-top" id="lbTop3">
@@ -493,10 +640,16 @@ $page = 'dashboard';
                     </div>
 
                     <div class="lb-footer">
-                        <div class="lb-rank-text" id="lbMyRankText">Your Rank: --</div>
-                        <button type="button" class="lb-btn" data-bs-toggle="modal" data-bs-target="#leaderboardModal">
-                            View Full Leaderboard
-                        </button>
+                        <div class="lb-rank-text" id="lbMyRankText"><?php echo $isGuestUser ? 'Guest preview: rank hidden' : 'Your Rank: --'; ?></div>
+                        <?php if ($isGuestUser): ?>
+                            <button type="button" class="lb-btn guest-locked-action" title="Sign in to view the full leaderboard">
+                                Full Leaderboard Locked
+                            </button>
+                        <?php else: ?>
+                            <button type="button" class="lb-btn" data-bs-toggle="modal" data-bs-target="#leaderboardModal">
+                                View Full Leaderboard
+                            </button>
+                        <?php endif; ?>
                     </div>
                 </div>
             </div>
@@ -604,9 +757,10 @@ $page = 'dashboard';
 </div>
 
 <script>
-    const LB_CURRENT_USER_ID = <?php echo json_encode((int)($_SESSION['user_id'] ?? 0)); ?>;
-    const LB_CURRENT_USER_NAME = <?php echo json_encode((string)($_SESSION['full_name'] ?? '')); ?>;
-
+    const IS_GUEST_DASHBOARD = <?php echo $isGuestUser ? 'true' : 'false'; ?>;
+    const LB_CURRENT_USER_ID = <?php echo json_encode($isGuestUser ? 0 : (int)($_SESSION['user_id'] ?? 0)); ?>;
+    const LB_CURRENT_USER_NAME = <?php echo json_encode($isGuestUser ? '' : (string)($_SESSION['full_name'] ?? '')); ?>;
+    
     function lbGet(obj, keys, fallback = null) {
         for (const k of keys) {
             if (obj && Object.prototype.hasOwnProperty.call(obj, k) && obj[k] !== null && obj[k] !== undefined) {
@@ -633,7 +787,7 @@ $page = 'dashboard';
         );
     }
 
-    function lbPickName(u) {
+   function lbPickName(u) {
         return lbGet(u, ['full_name', 'name', 'fullname', 'display_name', 'username'], 'Unknown');
     }
 
@@ -651,30 +805,17 @@ $page = 'dashboard';
     function lbPickProfilePic(u) {
         return lbGet(u, ['profile_pic'], null);
     }
-
+    
     function lbResolveProfilePicUrl(profilePic) {
         if (!profilePic) return null;
-
         let pic = String(profilePic).trim();
         if (!pic) return null;
-
         if (/^https?:\/\//i.test(pic)) return pic;
-
         pic = pic.replace(/\\/g, "/");
-
         const idx = pic.indexOf("/uploads/");
-        if (idx !== -1) {
-            return `${window.location.origin}${pic.slice(idx)}`; 
-        }
-
-        if (pic.startsWith("/")) {
-            return `${window.location.origin}${pic}`;
-        }
-
-        if (pic.startsWith("uploads/")) {
-            return `${window.location.origin}/${pic}`;
-        }
-
+        if (idx !== -1) return `${window.location.origin}${pic.slice(idx)}`;
+        if (pic.startsWith("/")) return `${window.location.origin}${pic}`;
+        if (pic.startsWith("uploads/")) return `${window.location.origin}/${pic}`;
         return `${window.location.origin}/${pic}`;
     }
 
@@ -682,18 +823,29 @@ $page = 'dashboard';
     function lbAvatarHTML(name, profilePicPath, extraClasses = '') {
         const initials = lbInitials(name);
         const resolved = lbResolveProfilePicUrl(profilePicPath);
-
-        if (!resolved) {
-            return `<div class="lb-avatar ${extraClasses}" aria-hidden="true">${initials}</div>`;
-        }
-
-        // Render <img> and fallback to initials if it fails
+        if (!resolved) return `<div class="lb-avatar ${extraClasses}" aria-hidden="true">${initials}</div>`;
         return `
-                <div class="lb-avatar ${extraClasses}" aria-hidden="true" data-initials="${initials}">
-                    <img src="${resolved}" alt="" style="width:100%;height:100%;object-fit:cover;border-radius:999px;display:block;"
-                         onerror="this.closest('.lb-avatar')?.replaceChildren(document.createTextNode(this.closest('.lb-avatar').dataset.initials || ''))" />
-                </div>
-            `.trim();
+            <div class="lb-avatar ${extraClasses}" aria-hidden="true" data-initials="${initials}">
+                <img src="${resolved}" alt="" style="width:100%;height:100%;object-fit:cover;border-radius:999px;display:block;"
+                    onerror="this.closest('.lb-avatar')?.replaceChildren(document.createTextNode(this.closest('.lb-avatar').dataset.initials || ''))" />
+            </div>
+        `.trim();
+    }
+
+    function lbPrivateDisplayName(name, rank = null) {
+        if (!IS_GUEST_DASHBOARD) return name;
+        return rank ? `Reviewee #${rank}` : 'Reviewee';
+    }
+
+    function lbPrivateNameHTML(name, rank = null) {
+        const displayName = lbPrivateDisplayName(name, rank);
+        if (!IS_GUEST_DASHBOARD) return displayName;
+        return `<span class="lb-name-private"><i class="fas fa-user-shield"></i>${displayName}</span>`;
+    }
+
+    function lbPrivateAvatarHTML(name, profilePicPath, extraClasses = '', rank = null) {
+        if (!IS_GUEST_DASHBOARD) return lbAvatarHTML(name, profilePicPath, extraClasses);
+        return `<div class="lb-avatar ${extraClasses} lb-avatar-private" aria-hidden="true"><i class="fas fa-user-lock"></i></div>`;
     }
 
 
@@ -704,50 +856,98 @@ $page = 'dashboard';
         return (a + b).toUpperCase() || 'U';
     }
 
-    function lbFormatPoints(n) {
-        try {
-            return new Intl.NumberFormat().format(n);
-        } catch {
-            return String(n);
-        }
+    function lbHasUsableId(value) {
+        return value !== null && value !== undefined && value !== '' && !Number.isNaN(Number(value));
+    }
+    
+    function lbNormalizeName(name) {
+        return String(name || '').trim().toLowerCase().replace(/\s+/g, ' ');
     }
 
-    async function lbFetchUsers({
-        page = 1,
-        limit = 10,
-        search = ''
-    } = {}) {
+    function lbIsCurrentUser(u) {
+        if (IS_GUEST_DASHBOARD) return false;
+        const rowId = lbPickId(u);
+        const rowName = lbPickName(u);
+        const hasCurrentUserId = lbHasUsableId(LB_CURRENT_USER_ID);
+        const hasRowId = lbHasUsableId(rowId);
+        if (hasCurrentUserId && hasRowId) return Number(rowId) === Number(LB_CURRENT_USER_ID);
+        if (!hasCurrentUserId && !hasRowId) return lbNormalizeName(rowName) === lbNormalizeName(LB_CURRENT_USER_NAME);
+        return false;
+    }
+    
+    function lbFormatPoints(n) {
+        try { return new Intl.NumberFormat().format(n); } catch { return String(n); }
+    }
+
+   async function lbFetchUsers({ page = 1, limit = 10, search = '' } = {}) {
         const url = `../partial/get_dashboard_data.php?mode=leaderboard&page=${page}&limit=${limit}&search=${encodeURIComponent(search)}`;
         const res = await fetch(url);
         return await res.json();
     }
+    
+    function computeDenseRanks(users) {
+        const ranks = {};
+        let lastPoints = null;
+        let currentRank = 0;
+        let displayRank = 0;
+        const sorted = [...users].sort((a,b) => lbPickPoints(b) - lbPickPoints(a));
+        sorted.forEach(u => {
+            const pts = lbPickPoints(u);
+            if (pts !== lastPoints) displayRank = currentRank + 1;
+            ranks[lbPickId(u)] = displayRank;
+            lastPoints = pts;
+            currentRank++;
+        });
+        return ranks;
+    }
 
-    function lbRenderTop3(users) {
-        const container = document.getElementById('lbTop3');
-        if (!container) return;
-
+     function lbRenderTable(users, { page, limit, total, precomputedRanks = {} }) {
+        const tbody = document.getElementById('lbTbody');
+        if (!tbody) return;
         if (!users || users.length === 0) {
-            container.innerHTML = '<div class="empty-state"><i class="fas fa-trophy"></i><p>No leaderboard data yet.</p></div>';
+            tbody.innerHTML = `<tr><td colspan="3"><div class="empty-state" style="padding: 1.5rem 0.5rem;"><i class="fas fa-users"></i><p class="mb-0">No users found.</p></div></td></tr>`;
             return;
         }
-
-        const top3 = users.slice(0, 3);
-        const rankClasses = ['rank-1', 'rank-2', 'rank-3'];
-
-        container.innerHTML = top3.map((u, idx) => {
+    
+        tbody.innerHTML = users.map(u => {
+            const userId = lbPickId(u);
+            const rank = precomputedRanks[userId] ?? '?';
             const name = lbPickName(u);
             const pts = lbPickPoints(u);
-            const initials = lbInitials(name);
+            const isMe = lbIsCurrentUser(u);
             return `
-                    <div class="lb-row">
-                        <div class="lb-left">
-                            <div class="lb-badge ${rankClasses[idx]}">${idx + 1}</div>
-                            ${lbAvatarHTML(name, lbPickProfilePic(u))}
-                            <div class="lb-name" title="${name.replaceAll('"','&quot;')}">${name}</div>
-                        </div>
-                        <div class="lb-points">${lbFormatPoints(pts)} pts</div>
+                <tr ${isMe ? 'style="outline: 2px solid rgba(23, 162, 184, 0.35);"' : ''}>
+                    <td class="fw-bold">${rank}</td>
+                    <td><div class="d-flex align-items-center gap-2">${lbPrivateAvatarHTML(name, lbPickProfilePic(u), "lb-avatar-sm", rank)}<span>${isMe ? '<span class="fw-bold">Mine</span>' : lbPrivateNameHTML(name, rank)}</span></div></td>
+                    <td class="fw-bold">${lbFormatPoints(pts)} pts</td>
+                </tr>
+            `;
+        }).join('');
+    }
+    
+    function lbRenderTop3(users) {
+        const el = document.getElementById('lbTop3');
+        if (!el) return;
+        if (!users || users.length === 0) {
+            el.innerHTML = '';
+            return;
+        }
+    
+        el.innerHTML = users.slice(0, 3).map((u, idx) => {
+            const rank = idx + 1;
+            const name = lbPickName(u);
+            const pts = lbPickPoints(u);
+            const badgeClass = ['rank-1','rank-2','rank-3'][idx] || '';
+            return `
+                <div class="lb-row">
+                    <div class="lb-left">
+                        <div class="lb-badge ${badgeClass}">${rank}</div>
+                        ${lbPrivateAvatarHTML(name, lbPickProfilePic(u), '', rank)}
+                        <div class="lb-name">${lbPrivateNameHTML(name, rank)}</div>
                     </div>
-                `;
+                    <div class="lb-points">${lbFormatPoints(pts)} pts</div>
+                </div>
+            `;
         }).join('');
     }
 
@@ -760,12 +960,13 @@ $page = 'dashboard';
         }
         const top3 = users.slice(0, 3);
         el.innerHTML = top3.map((u, idx) => {
+            const rank = idx + 1;
             const name = lbPickName(u);
             const pts = lbPickPoints(u);
             return `
                     <span class="lb-pill">
-                        <span class="fw-bold">#${idx + 1}</span>
-                        <span>${name}</span>
+                        <span class="fw-bold">#${rank}</span>
+                        <span>${lbPrivateNameHTML(name, rank)}</span>
                         <span class="text-muted">•</span>
                         <span>${lbFormatPoints(pts)} pts</span>
                     </span>
@@ -799,13 +1000,12 @@ $page = 'dashboard';
             const rank = (page - 1) * limit + i + 1;
             const name = lbPickName(u);
             const pts = lbPickPoints(u);
-            const id = lbPickId(u);
-            const isMe = (id && LB_CURRENT_USER_ID && Number(id) === Number(LB_CURRENT_USER_ID)) || (LB_CURRENT_USER_NAME && name === LB_CURRENT_USER_NAME);
+            const isMe = lbIsCurrentUser(u);
 
             return `
                     <tr ${isMe ? 'style="outline: 2px solid rgba(23, 162, 184, 0.35);"' : ''}>
                         <td class="fw-bold">${rank}</td>
-                        <td><div class="d-flex align-items-center gap-2">${lbAvatarHTML(name, lbPickProfilePic(u), "lb-avatar-sm")}<span>${isMe ? '<span class="fw-bold">Mine</span>' : name}</span></div></td>
+                        <td><div class="d-flex align-items-center gap-2">${lbPrivateAvatarHTML(name, lbPickProfilePic(u), "lb-avatar-sm", rank)}<span>${isMe ? '<span class="fw-bold">Mine</span>' : lbPrivateNameHTML(name, rank)}</span></div></td>
                         <td class="fw-bold">${lbFormatPoints(pts)} pts</td>
                     </tr>
                 `;
@@ -830,10 +1030,7 @@ $page = 'dashboard';
 
             for (let i = 0; i < users.length; i++) {
                 const u = users[i];
-                const id = lbPickId(u);
-                const name = lbPickName(u);
-                const match = (id && LB_CURRENT_USER_ID && Number(id) === Number(LB_CURRENT_USER_ID)) || (LB_CURRENT_USER_NAME && name === LB_CURRENT_USER_NAME);
-                if (match) {
+                if (lbIsCurrentUser(u)) {
                     return {
                         rank: (page - 1) * limit + i + 1,
                         total: lbPickTotal(payload, totalUsers)
@@ -848,8 +1045,10 @@ $page = 'dashboard';
         };
     }
 
-    function lbSetRankTexts(rank, total) {
-        const text = rank ? `Your Rank: #${rank} / ${total}` : `Your Rank: -- / ${total || '--'}`;
+      function lbSetRankTexts(rank, total) {
+        const text = IS_GUEST_DASHBOARD
+            ? `Guest preview: rank hidden`
+            : (rank ? `Your Rank: #${rank} / ${total}` : `Your Rank: -- / ${total || '--'}`);
         const el1 = document.getElementById('lbMyRankText');
         const el2 = document.getElementById('lbModalMyRankText');
         if (el1) el1.textContent = text;
@@ -881,15 +1080,21 @@ $page = 'dashboard';
             lbRenderTop3(topUsers);
             lbRenderModalTop3(topUsers);
 
-            const apiRank = lbGet(topPayload?.leaderboard, ['my_rank'], null);
-            if (apiRank) {
-                lbSetRankTexts(apiRank, total);
+            if (IS_GUEST_DASHBOARD) {
+                lbSetRankTexts(null, total);
             } else {
-                const {
-                    rank,
-                    total: t
-                } = await lbComputeMyRank(total);
-                lbSetRankTexts(rank, t);
+                const apiRankRaw = lbGet(topPayload?.leaderboard, ['my_rank'], null);
+                const apiRank = Number(apiRankRaw);
+
+                if (Number.isFinite(apiRank) && apiRank > 0) {
+                    lbSetRankTexts(apiRank, total);
+                } else {
+                    const {
+                        rank,
+                        total: t
+                    } = await lbComputeMyRank(total);
+                    lbSetRankTexts(rank, t);
+                }
             }
 
         } catch (e) {
@@ -899,42 +1104,206 @@ $page = 'dashboard';
         }
     }
 
+    // async function lbLoadModalPage() {
+    //     const {
+    //         page,
+    //         limit,
+    //         search
+    //     } = LB_STATE;
+    //     const tbody = document.getElementById('lbTbody');
+    //     if (tbody) {
+    //         tbody.innerHTML = `
+    //                 <tr><td colspan="3"><div class="skeleton" style="height: 44px;"></div></td></tr>
+    //                 <tr><td colspan="3"><div class="skeleton" style="height: 44px;"></div></td></tr>
+    //                 <tr><td colspan="3"><div class="skeleton" style="height: 44px;"></div></td></tr>
+    //             `;
+    //     }
+    //     const payload = await lbFetchUsers({
+    //         page,
+    //         limit,
+    //         search
+    //     });
+    //     const users = lbPickUsers(payload);
+    //     const total = lbPickTotal(payload, users.length);
+    //     LB_STATE.total = total;
+    //     lbRenderTable(users, {
+    //         page,
+    //         limit,
+    //         total
+    //     });
+
+    //     // Button states
+    //     const prev = document.getElementById('lbPrevBtn');
+    //     const next = document.getElementById('lbNextBtn');
+    //     const maxPage = Math.max(1, Math.ceil(total / limit));
+    //     if (prev) prev.disabled = page <= 1;
+    //     if (next) next.disabled = page >= maxPage;
+    // }
+    
     async function lbLoadModalPage() {
-        const {
-            page,
-            limit,
-            search
-        } = LB_STATE;
+        const { page, limit, search } = LB_STATE;
         const tbody = document.getElementById('lbTbody');
-        if (tbody) {
-            tbody.innerHTML = `
-                    <tr><td colspan="3"><div class="skeleton" style="height: 44px;"></div></td></tr>
-                    <tr><td colspan="3"><div class="skeleton" style="height: 44px;"></div></td></tr>
-                    <tr><td colspan="3"><div class="skeleton" style="height: 44px;"></div></td></tr>
-                `;
-        }
-        const payload = await lbFetchUsers({
-            page,
-            limit,
-            search
-        });
+        if (tbody) tbody.innerHTML = Array(3).fill('<tr><td colspan="3"><div class="skeleton" style="height:44px"></div></td></tr>').join('');
+    
+        const payload = await lbFetchUsers({ page, limit, search });
+        // console.log(payload);
         const users = lbPickUsers(payload);
         const total = lbPickTotal(payload, users.length);
         LB_STATE.total = total;
-        lbRenderTable(users, {
-            page,
-            limit,
-            total
-        });
-
-        // Button states
+    
+        const precomputedRanks = computeDenseRanks(users);
+        lbRenderTable(users, { page, limit, total, precomputedRanks });
+    
+        const apiRank = lbGet(payload?.leaderboard, ['my_rank'], precomputedRanks[LB_CURRENT_USER_ID]);
+        console.log(apiRank);
+        lbSetRankTexts(apiRank, total);
+    
+        // Pagination buttons
         const prev = document.getElementById('lbPrevBtn');
         const next = document.getElementById('lbNextBtn');
         const maxPage = Math.max(1, Math.ceil(total / limit));
         if (prev) prev.disabled = page <= 1;
         if (next) next.disabled = page >= maxPage;
     }
+    
+
+    function applyGuestDashboardBlurRestrictions() {
+        if (!IS_GUEST_DASHBOARD) return;
+
+        const targets = [
+            {
+                id: 'statsContainer',
+                message: 'Guest preview only — sign in to view your personal stats, streaks, and completed topics.',
+                small: false
+            },
+            {
+                id: 'progressContainer',
+                message: 'Progress analytics are locked for guests. Sign in to track your real study progress.',
+                small: false
+            },
+            {
+                id: 'activitiesContainer',
+                message: 'Recent activity is personalized. Sign in to view your study and exam history.',
+                small: true
+            },
+            {
+                id: 'performanceContainer',
+                message: 'Performance graphs are locked for guests. Sign in to view your real exam analytics.',
+                small: true
+            }
+        ];
+
+        targets.forEach(({ id, message, small }) => {
+            const el = document.getElementById(id);
+            if (!el) return;
+            el.classList.add('guest-blur-target');
+            if (small) el.classList.add('guest-blur-small');
+            el.setAttribute('data-guest-message', message);
+        });
+    }
+
+    function loadGuestDashboardPreview() {
+        document.getElementById('overallCompletion').textContent = 'Preview';
+        document.getElementById('studyStreak').textContent = '—';
+        document.getElementById('daysActive').textContent = '—';
+        document.getElementById('topicsCompleted').textContent = '—';
+
+        const progressContainer = document.getElementById('progressContainer');
+        if (progressContainer) {
+            progressContainer.innerHTML = `
+                <div class="guest-preview-note">
+                    <i class="fas fa-eye me-2"></i>This is a dashboard preview. Sign in to save progress, streaks, and personal analytics.
+                </div>
+                ${[
+                    ['Analytical Chemistry', 72, 'microscope', 'primary'],
+                    ['Organic Chemistry', 58, 'leaf', 'success'],
+                    ['Physical Chemistry', 44, 'calculator', 'warning'],
+                    ['Inorganic Chemistry', 63, 'atom', 'info'],
+                    ['BioChemistry', 51, 'dna', 'danger']
+                ].map(([category, percentage, icon, color]) => `
+                    <div class="progress-item">
+                        <div class="d-flex justify-content-between mb-2">
+                            <span><i class="fas fa-${icon} text-${color} me-2"></i>${category}</span>
+                            <strong>${percentage}%</strong>
+                        </div>
+                        <div class="progress" style="height: 6px;">
+                            <div class="progress-bar bg-${color}" style="width: ${percentage}%"></div>
+                        </div>
+                        <small class="text-muted">Sample category progress preview</small>
+                    </div>
+                `).join('')}
+            `;
+        }
+
+        const activitiesContainer = document.getElementById('activitiesContainer');
+        if (activitiesContainer) {
+            activitiesContainer.innerHTML = `
+                <div class="guest-preview-note">
+                    <i class="fas fa-lock me-2"></i>Recent activity is personalized after sign in.
+                </div>
+                <div class="activity-item">
+                    <div class="d-flex align-items-center">
+                        <i class="fas fa-book-open text-primary me-3" style="font-size:1.2rem;"></i>
+                        <div class="flex-grow-1">
+                            <h6 class="mb-1">Study material progress</h6>
+                            <p class="text-muted small mb-1">Completed files, videos, and PDFs appear here.</p>
+                            <small class="text-primary fw-bold">Preview only</small>
+                        </div>
+                    </div>
+                </div>
+                <div class="activity-item">
+                    <div class="d-flex align-items-center">
+                        <i class="fas fa-flask text-success me-3" style="font-size:1.2rem;"></i>
+                        <div class="flex-grow-1">
+                            <h6 class="mb-1">Exam attempts</h6>
+                            <p class="text-muted small mb-1">Post-test results and attempts appear here.</p>
+                            <small class="text-success fw-bold">Preview only</small>
+                        </div>
+                    </div>
+                </div>
+            `;
+        }
+
+        const performanceContainer = document.getElementById('performanceContainer');
+        if (performanceContainer) {
+            performanceContainer.innerHTML = `
+                <div class="guest-preview-note">
+                    <i class="fas fa-chart-column me-2"></i>Sample performance chart. Your real scores appear after sign in.
+                </div>
+                <div class="guest-chart-bars">
+                    ${[
+                        ['Analytical', 78],
+                        ['Organic', 66],
+                        ['Physical', 49],
+                        ['Inorganic', 61],
+                        ['BioChem', 54]
+                    ].map(([label, value]) => `
+                        <div class="guest-chart-bar">
+                            <div class="guest-chart-fill" style="height:${value}%"></div>
+                            <div class="guest-chart-label" title="${label}">${label}</div>
+                        </div>
+                    `).join('')}
+                </div>
+            `;
+        }
+
+        setTimeout(() => {
+            document.querySelectorAll('.progress-bar').forEach((bar, i) => {
+                const w = bar.style.width;
+                bar.style.width = '0%';
+                setTimeout(() => bar.style.width = w, i * 100);
+            });
+        }, 200);
+
+        applyGuestDashboardBlurRestrictions();
+    }
+
     async function loadDashboardData() {
+        if (IS_GUEST_DASHBOARD) {
+            loadGuestDashboardPreview();
+            return;
+        }
+
         try {
             const response = await fetch('../partial/get_dashboard_data.php');
             const data = await response.json();
@@ -1055,12 +1424,18 @@ $page = 'dashboard';
     document.addEventListener('DOMContentLoaded', () => {
         loadDashboardData();
         lbInitDashboardLeaderboard();
+        if (IS_GUEST_DASHBOARD) {
+            setTimeout(applyGuestDashboardBlurRestrictions, 350);
+        }
     });
 
     // Modal listeners
     document.addEventListener('DOMContentLoaded', () => {
         const modalEl = document.getElementById('leaderboardModal');
-        if (modalEl) {
+        if (modalEl && IS_GUEST_DASHBOARD) {
+            modalEl.addEventListener('show.bs.modal', (e) => e.preventDefault());
+        }
+        if (modalEl && !IS_GUEST_DASHBOARD) {
             modalEl.addEventListener('shown.bs.modal', () => {
                 lbRenderModalTop3(LB_STATE.top3);
                 LB_STATE.page = 1;
@@ -1068,7 +1443,7 @@ $page = 'dashboard';
             });
         }
 
-        modalEl.addEventListener('hidden.bs.modal', () => {
+        if (modalEl) modalEl.addEventListener('hidden.bs.modal', () => {
             // For Safety cleanup: sometimes backdrops stick if a JS error occurs while loading leaderboard
             document.querySelectorAll('.modal-backdrop').forEach(b => b.remove());
             document.body.classList.remove('modal-open');

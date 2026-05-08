@@ -1,11 +1,156 @@
 <?php
 require_once '../partial/db_conn.php';
+
+if (session_status() === PHP_SESSION_NONE) {
+    session_start();
+}
+
+function resolveCurrentUserId(): ?int
+{
+    $candidateKeys = ['user_id', 'student_id', 'uid', 'id'];
+    foreach ($candidateKeys as $key) {
+        if (!isset($_SESSION[$key])) {
+            continue;
+        }
+
+        $value = $_SESSION[$key];
+        if (is_numeric($value) && (int)$value > 0) {
+            return (int)$value;
+        }
+    }
+
+    return null;
+}
+
+if (!isset($_SESSION['guest_study_progress']) || !is_array($_SESSION['guest_study_progress'])) {
+    $_SESSION['guest_study_progress'] = [];
+}
+if (!isset($_SESSION['guest_selected_study_module']) || !is_array($_SESSION['guest_selected_study_module'])) {
+    $_SESSION['guest_selected_study_module'] = [];
+}
+
+$currentUserId = resolveCurrentUserId();
+$sessionRole = (string)($_SESSION['role'] ?? '');
+$isGuestUser = ($sessionRole === 'guest') || $currentUserId === null;
+$hasGuestProgress = !empty($_SESSION['guest_study_progress']);
+$guestSelectedStudyModule = !empty($_SESSION['guest_selected_study_module']) ? $_SESSION['guest_selected_study_module'] : null;
+
+if (isset($_GET['guest_progress_action'])) {
+    header('Content-Type: application/json; charset=utf-8');
+    $action = (string)$_GET['guest_progress_action'];
+
+    if ($action === 'get') {
+        echo json_encode([
+            'ok' => true,
+            'data' => $_SESSION['guest_study_progress']
+        ]);
+        exit;
+    }
+
+    if ($action === 'get_selected_module') {
+        echo json_encode([
+            'ok' => true,
+            'data' => $guestSelectedStudyModule
+        ]);
+        exit;
+    }
+
+    if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+        http_response_code(405);
+        echo json_encode([
+            'ok' => false,
+            'message' => 'Method not allowed.'
+        ]);
+        exit;
+    }
+
+    if ($action === 'save') {
+        if (!$isGuestUser) {
+            echo json_encode([
+                'ok' => true,
+                'message' => 'Authenticated users save directly to DB.'
+            ]);
+            exit;
+        }
+
+        $fileId = isset($_POST['file_id']) ? (int)$_POST['file_id'] : 0;
+        $progress = isset($_POST['progress']) ? (int)round((float)$_POST['progress']) : 0;
+        $progress = max(0, min(100, $progress));
+
+        if ($fileId <= 0) {
+            http_response_code(400);
+            echo json_encode([
+                'ok' => false,
+                'message' => 'Invalid file id.'
+            ]);
+            exit;
+        }
+
+        $key = (string)$fileId;
+        $existing = isset($_SESSION['guest_study_progress'][$key]) ? (int)$_SESSION['guest_study_progress'][$key] : 0;
+        $_SESSION['guest_study_progress'][$key] = max($existing, $progress);
+
+        echo json_encode([
+            'ok' => true,
+            'file_id' => $fileId,
+            'progress' => $_SESSION['guest_study_progress'][$key]
+        ]);
+        exit;
+    }
+
+    if ($action === 'clear') {
+        $_SESSION['guest_study_progress'] = [];
+        echo json_encode(['ok' => true]);
+        exit;
+    }
+
+    if ($action === 'set_selected_module') {
+        if (!$isGuestUser) {
+            echo json_encode([
+                'ok' => true,
+                'message' => 'Authenticated users are not restricted to one guest module.'
+            ]);
+            exit;
+        }
+
+        $materialId = isset($_POST['material_id']) ? (int)$_POST['material_id'] : 0;
+        $category = trim((string)($_POST['category'] ?? ''));
+        $moduleCode = trim((string)($_POST['module'] ?? ''));
+        $title = trim((string)($_POST['title'] ?? ''));
+
+        if ($materialId <= 0 || $category === '' || $moduleCode === '') {
+            http_response_code(400);
+            echo json_encode([
+                'ok' => false,
+                'message' => 'Invalid module selection.'
+            ]);
+            exit;
+        }
+
+        $_SESSION['guest_selected_study_module'] = [
+            'material_id' => $materialId,
+            'category' => substr($category, 0, 120),
+            'module' => substr($moduleCode, 0, 30),
+            'title' => substr($title, 0, 180)
+        ];
+
+        echo json_encode([
+            'ok' => true,
+            'data' => $_SESSION['guest_selected_study_module']
+        ]);
+        exit;
+    }
+
+    http_response_code(400);
+    echo json_encode([
+        'ok' => false,
+        'message' => 'Unknown action.'
+    ]);
+    exit;
+}
+
 $cats = ['Analytical Chemistry', 'Organic Chemistry', 'Physical Chemistry', 'Inorganic Chemistry', 'BioChemistry'];
 ?>
-<!DOCTYPE html>
-<html lang="en">
-
-<head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>ChemEase - Study Materials</title>
@@ -342,6 +487,42 @@ $cats = ['Analytical Chemistry', 'Organic Chemistry', 'Physical Chemistry', 'Ino
             color: white;
         }
 
+        .download-btn[aria-disabled="true"],
+        .view-btn:disabled,
+        .start-learning-btn:disabled {
+            opacity: 0.65;
+            cursor: not-allowed !important;
+            pointer-events: none;
+        }
+
+        .guest-download-disabled {
+            opacity: 0.65;
+            cursor: not-allowed !important;
+            pointer-events: auto !important;
+            border-color: #6c757d !important;
+            color: #6c757d !important;
+            background: #f8f9fa !important;
+        }
+
+        .material-card.guest-locked {
+            border-color: rgba(220, 53, 69, 0.22);
+        }
+
+        .guest-lock-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.35rem;
+            width: fit-content;
+            margin-bottom: 0.85rem;
+            padding: 0.3rem 0.65rem;
+            border-radius: 999px;
+            border: 1px solid rgba(220, 53, 69, 0.28);
+            background: rgba(220, 53, 69, 0.12);
+            color: #a71d2a;
+            font-size: 0.78rem;
+            font-weight: 700;
+        }
+
         .progress-container {
             margin: 1.5rem 0;
             padding: 1.2rem;
@@ -476,6 +657,44 @@ $cats = ['Analytical Chemistry', 'Organic Chemistry', 'Physical Chemistry', 'Ino
         .start-learning-btn:hover {
             transform: translateY(-6px);
             box-shadow: 0 18px 40px rgba(23, 162, 184, 0.55);
+        }
+
+        .prereq-loader {
+            position: fixed;
+            inset: 0;
+            background: rgba(255, 255, 255, 0.82);
+            backdrop-filter: blur(6px);
+            z-index: 3000;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: opacity .25s ease, visibility .25s ease;
+        }
+
+        .prereq-loader.hidden {
+            opacity: 0;
+            visibility: hidden;
+            pointer-events: none;
+        }
+
+        .prereq-loader-box {
+            background: #fff;
+            border: 1px solid rgba(23, 162, 184, 0.12);
+            border-radius: 18px;
+            box-shadow: 0 14px 40px rgba(23, 162, 184, 0.16);
+            padding: 1.25rem 1.5rem;
+            min-width: 280px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: .85rem;
+        }
+
+        .prereq-loader-text {
+            font-size: .95rem;
+            font-weight: 600;
+            color: #2c3e50;
+            text-align: center;
         }
 
         /* ──────────────────────────────────────────────
@@ -814,9 +1033,6 @@ $cats = ['Analytical Chemistry', 'Organic Chemistry', 'Physical Chemistry', 'Ino
             }
         }
     </style>
-</head>
-
-<body>
     <div class="study-materials-container">
         <div class="page-header">
             <h1 class="page-title">Study Materials</h1>
@@ -839,7 +1055,7 @@ $cats = ['Analytical Chemistry', 'Organic Chemistry', 'Physical Chemistry', 'Ino
             ?>
                 <div class="topic-section <?= $slug === 'analytical-chemistry' ? 'active' : '' ?>" data-topic="<?= $slug ?>">
                     <?php
-                    $stmt = $conn->prepare("SELECT id, title, description FROM study_materials WHERE category = ? ORDER BY created_at DESC");
+                    $stmt = $conn->prepare("SELECT id, title, description, category, module FROM study_materials WHERE category = ? ORDER BY module ASC, id ASC");
                     $stmt->bind_param('s', $cat);
                     $stmt->execute();
                     $result = $stmt->get_result();
@@ -853,7 +1069,7 @@ $cats = ['Analytical Chemistry', 'Organic Chemistry', 'Physical Chemistry', 'Ino
                         while ($material = $result->fetch_assoc()):
                             $mid = $material['id'];
                         ?>
-                            <div class="material-card" data-id="<?= $mid ?>">
+                            <div class="material-card" data-id="<?= $mid ?>" data-category="<?= htmlspecialchars($material['category']) ?>" data-module="<?= htmlspecialchars($material['module']) ?>">
                                 <div class="card-content">
                                     <h3 class="card-title"><?= htmlspecialchars($material['title']) ?></h3>
                                     <p class="card-description">
@@ -887,17 +1103,9 @@ $cats = ['Analytical Chemistry', 'Organic Chemistry', 'Physical Chemistry', 'Ino
                                                         if (preg_match('/(?:youtube\.com\/(?:[^\/]+\/.+\/|(?:v|e(?:mbed)?)\/|.*[?&]v=)|youtu\.be\/)([^"&?\/\s]{11})/i', $f['path'], $m)) {
                                                             $videoId = $m[1];
                                                         }
-                                                        if ($videoId) {
-                                                            $oembed = @file_get_contents("https://www.youtube.com/oembed?url=https://www.youtube.com/watch?v=$videoId&format=json");
-                                                            if ($oembed) {
-                                                                $json = json_decode($oembed, true);
-                                                                $displayName = $json['title'] ?? 'YouTube Video';
-                                                            } else {
-                                                                $displayName = 'YouTube Video';
-                                                            }
-                                                        } else {
-                                                            $displayName = 'YouTube Video';
-                                                        }
+                                                        // Do not call YouTube/oEmbed while PHP renders the page.
+                                                        // A blocked external request here prevents index.php from reaching its loader-hide script.
+                                                        $displayName = $videoId ? 'YouTube Video' : 'YouTube Video';
                                                     }
                                                 }
                                             ?>
@@ -914,9 +1122,25 @@ $cats = ['Analytical Chemistry', 'Organic Chemistry', 'Physical Chemistry', 'Ino
                                                             <i class="fas fa-eye"></i>
                                                         </button>
                                                         <?php if ($f['type'] === 'pdf'): ?>
-                                                            <a href="../<?= htmlspecialchars($f['path']) ?>" download class="download-btn">
-                                                                <i class="fas fa-download"></i>
-                                                            </a>
+                                                            <?php if ($isGuestUser): ?>
+                                                                <button
+                                                                    type="button"
+                                                                    class="download-btn guest-download-disabled"
+                                                                    data-fid="<?= $f['id'] ?>"
+                                                                    title="PDF downloads are disabled in guest mode"
+                                                                    aria-disabled="true">
+                                                                    <i class="fas fa-lock"></i>
+                                                                </button>
+                                                            <?php else: ?>
+                                                                <a
+                                                                    href="../<?= htmlspecialchars($f['path']) ?>"
+                                                                    download
+                                                                    class="download-btn"
+                                                                    data-fid="<?= $f['id'] ?>"
+                                                                    data-path="../<?= htmlspecialchars($f['path']) ?>">
+                                                                    <i class="fas fa-download"></i>
+                                                                </a>
+                                                            <?php endif; ?>
                                                         <?php endif; ?>
                                                     </div>
                                                 </div>
@@ -944,6 +1168,14 @@ $cats = ['Analytical Chemistry', 'Organic Chemistry', 'Physical Chemistry', 'Ino
         </div>
     </div>
 
+    <div id="prereqLoader" class="prereq-loader hidden">
+        <div class="prereq-loader-box">
+            <div class="spinner-border text-primary" role="status">
+                <span class="visually-hidden">Loading...</span>
+            </div>
+            <div class="prereq-loader-text">Loading study progress and module access...</div>
+        </div>
+    </div>
 
     <!-- Prerequisite Modal: block next module if previous post-test not passed -->
     <div class="modal fade" id="prereqModal" tabindex="-1" aria-hidden="true">
@@ -962,864 +1194,1090 @@ $cats = ['Analytical Chemistry', 'Organic Chemistry', 'Physical Chemistry', 'Ino
         </div>
     </div>
 
-    <script>
-        document.addEventListener('DOMContentLoaded', () => {
-            let currentModalInstance = null;
-            let currentModalElement = null;
-
-            let bypassPrereqOnce = false;
-
-            // Post-test prerequisite gating
-            const POSTTEST_STATUS = new Map(); // key: "Category::ModuleCode" => { passed: bool, bestPct, passingPct }
-
-            function parseModuleCodeFromMaterialTitle(title) {
-                const m = String(title || '').match(/^\s*Module\s+([A-Za-z0-9IVXLCDM]+)\s*\./i);
-                return m ? m[1].trim() : null;
-            }
-
-            function parseModuleCodeFromPostTestTitle(title) {
-                const m = String(title || '').match(/POST\s*TEST\s*\(\s*Module\s+([A-Za-z0-9IVXLCDM]+)\s*\)/i);
-                return m ? m[1].trim() : null;
-            }
-
-            function toPercent(score, total) {
-                const s = Number(score);
-                const t = Number(total);
-                if (!isFinite(s) || !isFinite(t) || t <= 0) return null;
-                return Math.round((s / t) * 100);
-            }
-
-            async function loadPostTestStatus() {
-                try {
-                    const r = await fetch('../partial/exam_list.php', {
-                        cache: 'no-store'
-                    });
-                    const j = await r.json();
-                    const exams = Array.isArray(j.data) ? j.data : [];
-
-                    for (const e of exams) {
-                        const moduleCode = parseModuleCodeFromPostTestTitle(e.title);
-                        if (!moduleCode) continue;
-
-                        const totalItems = Number(e.total_questions || e.actual_questions || 0);
-                        const bestPct = (e.user_score !== null && e.user_score !== undefined) ?
-                            Math.round(Number(e.user_score)) :
-                            null;
-                        const passingPct = (e.passing_score !== null && e.passing_score !== undefined) ?
-                            Math.round(Number(e.passing_score)) :
-                            null;
-
-                        const passed = (bestPct !== null && passingPct !== null && bestPct >= passingPct);
-                        console.log(passed)
-                        POSTTEST_STATUS.set(`${e.category}::${moduleCode}`, {
-                            passed,
-                            bestPct,
-                            passingPct
-                        });
-                    }
-                } catch (err) {
-                    console.error('Failed to load post-test status:', err);
-                }
-            }
-
-            // Kick off prerequisite data loading ASAP
-            loadPostTestStatus();
-
-            let prereqPrevMaterialId = null;
-
-            function getLockedMessage(reason) {
-                // Default message requested
-                const def = "Locked content: You failed to pass the exam, haven't taken the exam yet, or haven't finished the previous module.";
-                if (reason === 'not_finished') return "Locked content: You haven't finished the previous module yet. Complete it (100%) before proceeding.";
-                if (reason === 'not_taken') return "Locked content: You haven't taken the previous module's post test yet. Take and pass it to unlock the next module.";
-                if (reason === 'failed') return "Locked content: You failed to pass the exam. Please review the previous module/lesson and try again.";
-                return def;
-            }
-
-            function showPrereqModal(prevMaterialId, reason = null) {
-                prereqPrevMaterialId = prevMaterialId || null;
-                const el = document.getElementById('prereqModalMessage');
-                if (el) el.textContent = getLockedMessage(reason);
-
-                const backBtn = document.getElementById('goBackToPrevBtn');
-                if (backBtn) backBtn.style.display = prereqPrevMaterialId ? '' : 'none';
-
-                const m = new bootstrap.Modal(document.getElementById('prereqModal'));
-                m.show();
-            }
-
-            const goBackBtn = document.getElementById('goBackToPrevBtn');
-            if (goBackBtn) {
-                goBackBtn.addEventListener('click', () => {
-                    const mid = prereqPrevMaterialId;
-                    const modalEl = document.getElementById('prereqModal');
-                    const inst = modalEl ? bootstrap.Modal.getInstance(modalEl) : null;
-                    inst?.hide();
-
-                    if (!mid) return;
-                    const btn = document.querySelector(`.start-learning-btn[data-id="${mid}"]`);
-                    if (!btn) return;
-
-                    // Allow opening the previous module even if we're currently locked
-                    bypassPrereqOnce = true;
-                    btn.click();
-                });
-            }
-
-            function getMaterialAverageProgress(mid) {
-
-                const cont = document.getElementById('prog-' + mid);
-                if (!cont) return 0;
-
-                const items = cont.querySelectorAll('.progress-item .progress-percentage');
-                if (!items.length) return 0;
-
-                let sum = 0;
-                let count = 0;
-                items.forEach(el => {
-                    const v = parseFloat(String(el.textContent || '').replace('%', '').trim());
-                    if (!Number.isNaN(v)) {
-                        sum += v;
-                        count++;
-                    }
-                });
-                return count ? (sum / count) : 0;
-            }
-
-            const tabs = document.querySelectorAll('.topic-tab');
-            const sections = document.querySelectorAll('.topic-section');
-
-            tabs.forEach(tab => {
-                tab.addEventListener('click', () => {
-                    const target = tab.dataset.topic;
-                    tabs.forEach(t => t.classList.remove('active'));
-                    tab.classList.add('active');
-                    sections.forEach(sec => sec.classList.toggle('active', sec.dataset.topic === target));
-                });
-            });
-
-            function getYouTubeEmbed(url) {
-                if (!url) return '';
-                const regExp = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|&v=)([^#&?]*).*/;
-                const match = url.match(regExp);
-                const videoId = match && match[2].length === 11 ? match[2] : null;
-                return videoId ? `https://www.youtube.com/embed/${videoId}?autoplay=1&rel=0&modestbranding=1` : url;
-            }
-
-            async function getYouTubeTitle(videoUrl) {
-                try {
-                    const videoIdMatch = videoUrl.match(/(?:youtu\.be\/|youtube\.com(?:\/embed\/|\/v\/|\/watch\?v=|\/watch\?.+&v=))([^"&?\/\s]{11})/i);
-                    if (!videoIdMatch) return 'Untitled Video';
-                    const videoId = videoIdMatch[1];
-                    const response = await fetch(`https://www.youtube.com/oembed?url=https://www.youtube.com/watch?v=${videoId}&format=json`);
-                    if (!response.ok) return 'Untitled Video';
-                    const data = await response.json();
-                    return data.title || 'Untitled Video';
-                } catch (err) {
-                    return 'Untitled Video';
-                }
-            }
-
-            function getFileDisplayName(fileId) {
-                const item = document.querySelector(`[data-file-id="${fileId}"]`);
-                return item ? (item.dataset.fileName || 'File') : 'File';
-            }
-
-            function markAsCompleted(fileId) {
-                saveProgressSmart(fileId, 100, {
-                    force: true
-                });
-                updateProgressBar(fileId, 100);
-            }
-
-            function destroyModal() {
-                runAndClearCleanups();
-                if (currentModalInstance) {
-                    try {
-                        currentModalInstance.hide();
-                        currentModalInstance.dispose();
-                    } catch (e) {}
-                    currentModalInstance = null;
-                }
-                if (currentModalElement) {
-                    const iframes = currentModalElement.querySelectorAll('iframe');
-                    iframes.forEach(iframe => iframe.src = 'about:blank');
-                    currentModalElement.remove();
-                    currentModalElement = null;
-                }
-                document.querySelectorAll('.modal-backdrop').forEach(b => b.remove());
-                document.body.classList.remove('modal-open');
-                document.body.style.overflow = '';
-                document.body.style.paddingRight = '';
-            }
-
-
-            function enforcePrerequisitesFromButton(btnEl) {
-                try {
-                    const card = btnEl.closest('.material-card');
-                    const section = btnEl.closest('.topic-section');
-                    const category = section?.dataset?.topic || null;
-
-                    if (!category || !card || !section) return true;
-
-                    const cards = Array.from(section.querySelectorAll('.material-card'));
-                    const idx = cards.indexOf(card);
-                    if (idx <= 0) return true;
-
-                    const prevCard = cards[idx - 1];
-                    const prevMid = prevCard?.dataset?.id || null;
-                    const prevTitle = prevCard?.querySelector('.card-title')?.textContent?.trim() || '';
-                    const prevModuleCode = parseModuleCodeFromMaterialTitle(prevTitle);
-
-                    if (prevMid) {
-                        const prevAvg = getMaterialAverageProgress(prevMid);
-                        if (prevAvg < 100) {
-                            showPrereqModal(prevMid, 'not_finished');
-                            return false;
-                        }
-                    }
-
-                    if (prevModuleCode) {
-                        const st = POSTTEST_STATUS.get(`${category}::${prevModuleCode}`);
-                        if (!st) {
-                            showPrereqModal(prevMid, 'not_taken');
-                            return false;
-                        }
-                        if (st.passed !== true) {
-                            showPrereqModal(prevMid, 'failed');
-                            return false;
-                        }
-                    }
-
-                    return true;
-                } catch (err) {
-                    console.error('Prereq check failed:', err);
-                    return true;
-                }
-            }
-
-            document.querySelectorAll('.view-btn').forEach(btn => {
-                btn.addEventListener('click', e => {
-                    e.stopPropagation();
-
-                    if (!bypassPrereqOnce) {
-                        if (!enforcePrerequisitesFromButton(btn)) return;
-                    } else {
-                        bypassPrereqOnce = false;
-                    }
-
-                    const fid = btn.dataset.fid;
-                    destroyModal();
-                    openSingleFile(fid);
-                });
-            });
-
-            document.querySelectorAll('.start-learning-btn').forEach(btn => {
-                btn.addEventListener('click', async e => {
-                    e.stopPropagation();
-                    const mid = btn.dataset.id;
-
-                    if (!bypassPrereqOnce) {
-                        if (!enforcePrerequisitesFromButton(btn)) return;
-                    } else {
-                        bypassPrereqOnce = false;
-                    }
-                    destroyModal();
-
-                    try {
-                        const resp = await fetch(`../partial/get_material_files.php?id=${mid}`);
-                        const data = await resp.json();
-
-                        const materialTitle = btn.closest('.material-card').querySelector('.card-title').textContent.trim();
-                        const materialDesc = btn.closest('.material-card').querySelector('.card-description').textContent.trim();
-
-                        const pdfs = Array.isArray(data.pdfs) ? data.pdfs : [];
-                        const videos = Array.isArray(data.videos) ? data.videos : [];
-
-                        if (!pdfs.length && !videos.length) {
-                            alert('No content available.');
-                            return;
-                        }
-
-                        const modal = createModal(materialTitle, 'custom-modal');
-                        const body = modal.querySelector('#viewerBody');
-
-                        let tabsHtml = '';
-                        let panesHtml = '';
-
-                        const hasPdfs = pdfs.length > 0;
-                        const hasVideos = videos.length > 0;
-
-                        if (hasPdfs) {
-                            tabsHtml += `<li class="nav-item"><a class="nav-link active" data-bs-toggle="tab" href="#tab-pdfs">PDFs (${pdfs.length})</a></li>`;
-                            let list = '';
-                            pdfs.forEach(f => {
-                                const fname = f.title || f.path.split('/').pop()
-                                    .replace(/^pdf_[a-f0-9]{11}\./i, '')
-                                    .replace('.pdf', '')
-                                    .replace(/_/g, ' ');
-                                list += `
-                        <div class="file-list-item pdf" onclick="openFile(${f.id})">
-                            <i class="fas fa-file-pdf file-icon"></i>
-                            <div class="file-info">
-                                <div class="file-title">${fname}</div>
-                             </div>
-                            <i class="fas fa-arrow-right action-icon"></i>
-                        </div>`;
-                            });
-                            panesHtml += `<div class="tab-pane fade show active" id="tab-pdfs">${list}</div>`;
-                        }
-
-                        if (hasVideos) {
-                            const active = !hasPdfs ? ' active' : '';
-                            tabsHtml += `<li class="nav-item"><a class="nav-link${active}" data-bs-toggle="tab" href="#tab-videos">Videos (${videos.length})</a></li>`;
-
-                            let list = '';
-                            for (const v of videos) {
-                                let displayTitle = v.title;
-                                if (!displayTitle || displayTitle.trim() === '' || displayTitle === 'Untitled Video') {
-                                    displayTitle = await getYouTubeTitle(v.path);
-                                }
-                                list += `
-                        <div class="file-list-item video" onclick="openFile(${v.id})">
-                            <i class="fas fa-play-circle file-icon"></i>
-                            <div class="file-info">
-                                <div class="file-title">${displayTitle}</div>
-                             </div>
-                            <i class="fas fa-arrow-right action-icon"></i>
-                        </div>`;
-                            }
-                            const showActive = !hasPdfs ? ' show active' : '';
-                            panesHtml += `<div class="tab-pane fade${showActive}" id="tab-videos">${list}</div>`;
-                        }
-
-                        body.innerHTML = `
-                    <div class="h-100 d-flex flex-column">
-                        <div class="border-bottom bg-white px-3 py-3 px-md-4">
-                            <h4 class="mb-3 fw-bold text-center text-dark">${materialTitle}</h4>
-                            <div class="material-desc">${materialDesc || 'Select a resource to begin studying.'}</div>
+    <!-- Guest Download Modal -->
+    <div class="modal fade" id="guestDownloadModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Sign in to download</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="d-flex gap-3 align-items-start">
+                        <div class="d-inline-flex align-items-center justify-content-center rounded-circle bg-info bg-opacity-10 text-info flex-shrink-0" style="width:46px;height:46px;">
+                            <i class="fas fa-lock"></i>
                         </div>
-                        <ul class="nav nav-tabs px-2 pt-2 border-bottom-0">${tabsHtml}</ul>
-                        <div class="tab-content flex-grow-1 overflow-auto p-2 p-md-3">${panesHtml}</div>
-                    </div>`;
+                        <div>
+                            <h6 class="fw-bold mb-2">PDF downloads are disabled in guest mode.</h6>
+                            <p class="mb-0 text-muted">You can still view all study materials as a guest. Sign in or create an account to download PDFs and keep your progress.</p>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Keep browsing</button>
+                    <a href="../signin.php" class="btn btn-primary">Sign in / Create account</a>
+                </div>
+            </div>
+        </div>
+    </div>
 
-                        currentModalInstance = new bootstrap.Modal(modal, {
-                            backdrop: 'static',
-                            keyboard: false
-                        });
-                        currentModalElement = modal;
-                        currentModalInstance.show();
+    <script>
+document.addEventListener('DOMContentLoaded', () => {
+    let currentModalInstance = null;
+    let currentModalElement = null;
+    let bypassPrereqOnce = false;
+    let prereqPrevMaterialId = null;
+    let __ytApiPromise = null;
 
-                    } catch (err) {
-                        alert('Error loading materials');
-                        console.error(err);
-                    }
+    const IS_GUEST = <?= $isGuestUser ? 'true' : 'false' ?>;
+
+    const POSTTEST_STATUS = new Map();
+    const MATERIAL_PROGRESS = new Map();
+    const MATERIAL_META = new Map();
+    const CATEGORY_MODULE_INDEX = new Map();
+
+    const __progressState = {
+        lastSavedPct: new Map(),
+        lastSentAt: new Map(),
+        lastUiPct: new Map(),
+        cleanups: [],
+    };
+
+    let postTestReady = false;
+    let progressReady = false;
+    let prereqBootstrapDone = false;
+    let guestSelectedModule = null;
+
+    const prereqLoaderEl = document.getElementById('prereqLoader');
+
+    function showPrereqLoader() {
+        prereqLoaderEl?.classList.remove('hidden');
+    }
+
+    function hidePrereqLoader() {
+        prereqLoaderEl?.classList.add('hidden');
+    }
+
+    function setLearningButtonsDisabled(disabled = true) {
+        document.querySelectorAll('.view-btn, .start-learning-btn, .download-btn').forEach(btn => {
+            // Never leave buttons physically unclickable. Prereq/guest rules are enforced inside click handlers.
+            if ('disabled' in btn) btn.disabled = false;
+            btn.style.pointerEvents = '';
+            btn.style.opacity = '';
+            btn.style.cursor = '';
+
+            if (btn.classList.contains('download-btn')) {
+                btn.setAttribute('aria-disabled', 'false');
+                btn.removeAttribute('tabindex');
+            }
+        });
+    }
+
+    function updatePrereqBootstrapState() {
+        if (postTestReady && progressReady) {
+            prereqBootstrapDone = true;
+            setLearningButtonsDisabled(false);
+            hidePrereqLoader();
+        }
+    }
+
+    function getGuestProgressFromBrowser() {
+        try {
+            return JSON.parse(sessionStorage.getItem('guest_progress') || '{}') || {};
+        } catch (e) {
+            return {};
+        }
+    }
+
+    function saveGuestProgressToBrowser(fileId, progress) {
+        const safeFileId = parseInt(fileId, 10);
+        const safeProgress = Math.max(0, Math.min(100, Math.round(Number(progress) || 0)));
+        if (!Number.isFinite(safeFileId) || safeFileId <= 0) return;
+
+        const map = getGuestProgressFromBrowser();
+        const current = Number(map[safeFileId] || 0);
+        map[safeFileId] = Math.max(current, safeProgress);
+        sessionStorage.setItem('guest_progress', JSON.stringify(map));
+    }
+
+    function getGuestSelectedModuleFromBrowser() {
+        try {
+            return JSON.parse(sessionStorage.getItem('guest_selected_module') || 'null');
+        } catch (e) {
+            return null;
+        }
+    }
+
+    function setGuestSelectedModuleToBrowser(payload) {
+        if (!payload || !payload.material_id) return false;
+        const safePayload = {
+            material_id: String(payload.material_id),
+            category: String(payload.category || ''),
+            module: String(payload.module || ''),
+            title: String(payload.title || '')
+        };
+        sessionStorage.setItem('guest_selected_module', JSON.stringify(safePayload));
+        guestSelectedModule = safePayload;
+        return true;
+    }
+
+    function normalizeCategory(value) {
+        return String(value || '')
+            .trim()
+            .toLowerCase()
+            .replace(/&/g, 'and')
+            .replace(/[^a-z0-9]+/g, '-')
+            .replace(/^-+|-+$/g, '');
+    }
+
+    function normalizeModule(value) {
+        return String(value || '').trim().toUpperCase();
+    }
+
+    function parseModuleCodeFromPostTestTitle(title) {
+        const m = String(title || '').match(/POST\s*TEST\s*\(\s*Module\s+([A-Za-z0-9IVXLCDM]+)\s*\)/i);
+        return m ? normalizeModule(m[1]) : null;
+    }
+
+    function moduleToSortableValue(moduleCode) {
+        const code = normalizeModule(moduleCode);
+        if (/^\d+$/.test(code)) return Number(code);
+        if (/^[A-Z]$/.test(code)) return code.charCodeAt(0) - 64;
+        const roman = { I: 1, II: 2, III: 3, IV: 4, V: 5, VI: 6, VII: 7, VIII: 8, IX: 9, X: 10 };
+        return roman[code] ?? Number.MAX_SAFE_INTEGER;
+    }
+
+    function buildMaterialMeta() {
+        MATERIAL_META.clear();
+        CATEGORY_MODULE_INDEX.clear();
+
+        document.querySelectorAll('.material-card').forEach(card => {
+            const materialId = String(card.dataset.id || '');
+            const categoryKey = normalizeCategory(card.dataset.category);
+            const moduleKey = normalizeModule(card.dataset.module);
+            const meta = { materialId, categoryKey, moduleKey, sortValue: moduleToSortableValue(moduleKey), card };
+
+            MATERIAL_META.set(materialId, meta);
+            if (!CATEGORY_MODULE_INDEX.has(categoryKey)) CATEGORY_MODULE_INDEX.set(categoryKey, []);
+            CATEGORY_MODULE_INDEX.get(categoryKey).push(meta);
+        });
+
+        CATEGORY_MODULE_INDEX.forEach(items => {
+            items.sort((a, b) => a.sortValue - b.sortValue || Number(a.materialId) - Number(b.materialId));
+        });
+    }
+
+    function isFirstUnlockedModuleForGuest(materialId) {
+        // Guests can now access every study-material module.
+        return true;
+    }
+
+    function isGuestModuleAllowed(materialId) {
+        // Guests can view all materials. Only PDF downloads are restricted.
+        return true;
+    }
+
+    async function ensureGuestModuleSelectionFromTrigger(triggerEl) {
+        if (!IS_GUEST) return true;
+
+        const card = triggerEl?.closest('.material-card');
+        if (card) {
+            setGuestSelectedModuleToBrowser({
+                material_id: String(card.dataset.id || ''),
+                category: card.dataset.category || '',
+                module: card.dataset.module || '',
+                title: card.querySelector('.card-title')?.textContent?.trim() || ''
+            });
+        }
+
+        return true;
+    }
+
+    function applyGuestModuleLockBadges() {
+        // No module lock badges in guest mode because all study materials are viewable.
+        document.querySelectorAll('.material-card.guest-locked').forEach(card => card.classList.remove('guest-locked'));
+        document.querySelectorAll('.guest-lock-badge').forEach(badge => badge.remove());
+    }
+
+    function refreshMaterialProgressState(materialId) {
+        const cont = document.getElementById('prog-' + materialId);
+        if (!cont) {
+            MATERIAL_PROGRESS.set(String(materialId), { avg: 0, complete: false, count: 0 });
+            return;
+        }
+
+        const values = Array.from(cont.querySelectorAll('.progress-item .progress-percentage'))
+            .map(el => parseFloat(String(el.textContent || '').replace('%', '').trim()))
+            .filter(v => Number.isFinite(v));
+
+        const avg = values.length ? (values.reduce((a, b) => a + b, 0) / values.length) : 0;
+        const complete = values.length > 0 && values.every(v => v >= 100);
+        MATERIAL_PROGRESS.set(String(materialId), { avg, complete, count: values.length });
+    }
+
+    function isMaterialComplete(materialId) {
+        return MATERIAL_PROGRESS.get(String(materialId))?.complete === true;
+    }
+
+    function getPostTestStatusForMaterial(materialMeta) {
+        if (!materialMeta) return null;
+        return POSTTEST_STATUS.get(`${materialMeta.categoryKey}::${materialMeta.moduleKey}`) || null;
+    }
+
+    function getPreviousMaterialMeta(materialId) {
+        const current = MATERIAL_META.get(String(materialId));
+        if (!current) return null;
+        const items = CATEGORY_MODULE_INDEX.get(current.categoryKey) || [];
+        const idx = items.findIndex(item => item.materialId === String(materialId));
+        if (idx <= 0) return null;
+        return items[idx - 1] || null;
+    }
+
+    async function fetchWithTimeout(url, opts = {}, timeoutMs = 12000) {
+        const ctrl = new AbortController();
+        const timer = setTimeout(() => ctrl.abort(), timeoutMs);
+        try {
+            return await fetch(url, { ...opts, signal: ctrl.signal });
+        } finally {
+            clearTimeout(timer);
+        }
+    }
+
+    async function loadPostTestStatus() {
+        try {
+            const r = await fetchWithTimeout('../partial/exam_list.php', { cache: 'no-store' }, 10000);
+            if (!r.ok) throw new Error(`HTTP ${r.status}`);
+            const j = await r.json();
+            const exams = Array.isArray(j.data) ? j.data : [];
+
+            POSTTEST_STATUS.clear();
+            for (const e of exams) {
+                const moduleCode = parseModuleCodeFromPostTestTitle(e.title);
+                if (!moduleCode) continue;
+
+                const categoryKey = normalizeCategory(e.category);
+                const bestPct = (e.user_score !== null && e.user_score !== undefined) ? Math.round(Number(e.user_score)) : null;
+                const passingPct = (e.passing_score !== null && e.passing_score !== undefined) ? Math.round(Number(e.passing_score)) : null;
+                const passed = bestPct !== null && passingPct !== null && bestPct >= passingPct;
+
+                POSTTEST_STATUS.set(`${categoryKey}::${moduleCode}`, { passed, bestPct, passingPct, rawTitle: e.title });
+            }
+        } catch (err) {
+            console.error('Failed to load post-test status:', err);
+        } finally {
+            postTestReady = true;
+            updatePrereqBootstrapState();
+        }
+    }
+
+    async function loadProgressData() {
+        try {
+            const materialMap = new Map();
+
+            if (IS_GUEST) {
+                const guestProgress = getGuestProgressFromBrowser();
+                document.querySelectorAll('.material-card').forEach(card => {
+                    const mid = String(card.dataset.id || '');
+                    const files = [];
+                    card.querySelectorAll('.material-item[data-file-id]').forEach(item => {
+                        const fid = String(item.dataset.fileId || '');
+                        if (!Object.prototype.hasOwnProperty.call(guestProgress, fid)) return;
+                        const safeProgress = Math.max(0, Math.min(100, Number(guestProgress[fid] || 0)));
+                        files.push({ id: fid, progress: safeProgress });
+                    });
+                    if (files.length) materialMap.set(mid, files);
                 });
+            } else {
+                const r = await fetchWithTimeout('../partial/get_progress.php', { cache: 'no-store' }, 10000);
+                if (!r.ok) throw new Error(`HTTP ${r.status}`);
+                const { data } = await r.json();
+                if (Array.isArray(data)) {
+                    data.forEach(mat => materialMap.set(String(mat.id), Array.isArray(mat.files) ? mat.files : []));
+                }
+            }
+
+            document.querySelectorAll('.material-card').forEach(card => {
+                const mid = String(card.dataset.id || '');
+                const cont = document.getElementById('prog-' + mid);
+                const files = materialMap.get(mid) || [];
+                if (!cont) return;
+
+                if (!files.length) {
+                    MATERIAL_PROGRESS.set(mid, { avg: 0, complete: false, count: 0 });
+                    return;
+                }
+
+                cont.innerHTML = '<div class="progress-header"><i class="fas fa-chart-line"></i> Your Progress</div>';
+                files.forEach(p => {
+                    const name = getFileDisplayName(p.id);
+                    const safeProgress = Math.max(0, Math.min(100, Number(p.progress || 0)));
+                    cont.insertAdjacentHTML('beforeend', `
+                        <div class="progress-item" data-fid="${p.id}">
+                            <div class="progress-item-left">
+                                <div class="progress-item-name" title="${escapeHtml(name)}">${escapeHtml(name)}</div>
+                                <div class="progress-bar-wrapper"><div class="progress-bar-fill" style="width:${safeProgress}%"></div></div>
+                            </div>
+                            <div class="progress-item-right">
+                                <span class="progress-percentage">${safeProgress}%</span>
+                                ${safeProgress >= 100 ? '<i class="fas fa-check-circle progress-check"></i>' : ''}
+                            </div>
+                        </div>
+                    `);
+                    __progressState.lastUiPct.set(String(p.id), safeProgress);
+                    __progressState.lastSavedPct.set(String(p.id), safeProgress);
+                });
+
+                refreshMaterialProgressState(mid);
             });
 
-            window.openFile = function(fid) {
-                destroyModal();
-                openSingleFile(fid);
-            };
+            document.querySelectorAll('.material-card').forEach(card => {
+                const mid = String(card.dataset.id || '');
+                if (!MATERIAL_PROGRESS.has(mid)) MATERIAL_PROGRESS.set(mid, { avg: 0, complete: false, count: 0 });
+            });
+        } catch (err) {
+            console.error('Progress fetch error:', err);
+        } finally {
+            progressReady = true;
+            updatePrereqBootstrapState();
+        }
+    }
 
-            async function openSingleFile(fid) {
+    async function syncGuestProgressToDbOnce() {
+        if (IS_GUEST) return;
+        const guestProgress = getGuestProgressFromBrowser();
+        const entries = Object.entries(guestProgress);
+        if (!entries.length) return;
 
-                fetch(`../partial/get_one_file.php?fid=${fid}`)
-                    .then(r => r.json())
-                    .then(d => {
-                        if (!d?.type) {
-                            alert('File not found');
-                            return;
-                        }
+        try {
+            const results = await Promise.all(entries.map(async ([fileId, progress]) => {
+                const safeFileId = parseInt(fileId, 10);
+                const safeProgress = Math.max(0, Math.min(100, Math.round(Number(progress) || 0)));
+                if (!Number.isFinite(safeFileId) || safeFileId <= 0) return true;
 
-                        const title = d.title || (d.type === 'pdf' ? 'PDF Document' : 'Video Lesson');
-                        const modal = createModal(title, 'custom-modal');
-                        const body = modal.querySelector('#viewerBody');
-
-                        if (d.type === 'pdf') {
-                            body.innerHTML = `<iframe src="../${d.path}" style="width:100%;height:100%;border:none;"></iframe>`;
-                            setupPdfTimeTracking(fid, `../${d.path}`);
-                        } else if (d.type === 'youtube') {
-                            body.innerHTML = renderYouTubePlayerHtml(fid, d.path);
-                            setupYouTubeProgressTracking(fid, d.path);
-                        }
-
-                        currentModalInstance = new bootstrap.Modal(modal, {
-                            backdrop: 'static',
-                            keyboard: false
-                        });
-                        currentModalElement = modal;
-
-                        modal.addEventListener('hidden.bs.modal', destroyModal);
-                        currentModalInstance.show();
-                    })
-                    .catch(() => alert('Error loading content'));
-            }
-
-            function setupPdfTimeTracking(fileId, url) {
-                const MIN_SECONDS = 60;
-                const MAX_SECONDS = 1800;
-                const SECONDS_PER_MB = 60;
-
-                async function getPdfSizeBytes(u) {
-                    try {
-                        const head = await fetch(u, {
-                            method: 'HEAD',
-                            cache: 'no-store'
-                        });
-                        if (head && head.ok) {
-                            const len = head.headers.get('content-length');
-                            if (len && !isNaN(Number(len))) return Number(len);
-                        }
-                    } catch (e) {}
-
-                    try {
-                        const rangeRes = await fetch(u, {
-                            method: 'GET',
-                            headers: {
-                                'Range': 'bytes=0-0'
-                            },
-                            cache: 'no-store'
-                        });
-                        if (rangeRes && (rangeRes.status === 206 || rangeRes.ok)) {
-                            const cr = rangeRes.headers.get('content-range');
-                            if (cr) {
-                                const total = cr.split('/')[1];
-                                if (total && !isNaN(Number(total))) return Number(total);
-                            }
-                            const len = rangeRes.headers.get('content-length');
-                            if (len && !isNaN(Number(len))) return Number(len);
-                        }
-                    } catch (e) {}
-
-                    return null;
-                }
-
-                function estimateSeconds(bytes) {
-                    if (!bytes || bytes <= 0) return 600;
-                    const mb = bytes / (1024 * 1024);
-                    const est = Math.ceil(mb * SECONDS_PER_MB);
-                    return Math.max(MIN_SECONDS, Math.min(MAX_SECONDS, est));
-                }
-
-                getPdfSizeBytes(url).then((bytes) => {
-                    const secondsToComplete = estimateSeconds(bytes);
-                    startTimeBasedTracking(fileId, secondsToComplete, {
-                        minDelta: 1
-                    });
+                const r = await fetch('../partial/save_progress.php', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                    body: new URLSearchParams({ file_id: String(safeFileId), progress: String(safeProgress) })
                 });
+                return r.ok;
+            }));
+
+            if (results.every(Boolean)) {
+                sessionStorage.removeItem('guest_progress');
+                sessionStorage.removeItem('guest_selected_module');
+            }
+        } catch (err) {
+            console.error('Failed to sync guest progress after login:', err);
+        }
+    }
+
+    async function bootstrapStudyMaterials() {
+        buildMaterialMeta();
+        prereqBootstrapDone = false;
+        postTestReady = false;
+        progressReady = false;
+
+        showPrereqLoader();
+        setLearningButtonsDisabled(false);
+
+        const failSafe = setTimeout(() => {
+            if (!prereqBootstrapDone) {
+                console.warn('Failsafe triggered: releasing study-materials loader.');
+                postTestReady = true;
+                progressReady = true;
+                updatePrereqBootstrapState();
+            }
+        }, 8000);
+
+        try {
+            if (IS_GUEST) {
+                postTestReady = true;
+                guestSelectedModule = getGuestSelectedModuleFromBrowser();
+                applyGuestModuleLockBadges();
+                await loadProgressData();
+            } else {
+                await loadPostTestStatus();
+                await syncGuestProgressToDbOnce();
+                await loadProgressData();
+            }
+        } catch (err) {
+            console.error('bootstrapStudyMaterials error:', err);
+            postTestReady = true;
+            progressReady = true;
+            updatePrereqBootstrapState();
+        } finally {
+            clearTimeout(failSafe);
+            postTestReady = true;
+            progressReady = true;
+            updatePrereqBootstrapState();
+        }
+    }
+
+    function getLockedMessage(reason) {
+        const def = "Locked content: You failed to pass the exam, haven't taken the exam yet, or haven't finished the previous module.";
+        if (reason === 'not_finished') return "Locked content: You haven't finished the previous module yet. Complete it (100%) before proceeding.";
+        if (reason === 'not_taken') return "Locked content: You haven't taken the previous module's post test yet. Take and pass it to unlock the next module.";
+        if (reason === 'failed') return 'Locked content: You failed to pass the exam. Please review the previous module/lesson and try again.';
+        if (reason === 'guest_signup_required') return 'Guest mode allows viewing all study materials, but PDF downloads are disabled. Sign up or sign in to download files and keep your progress.';
+        return def;
+    }
+
+    function showPrereqModal(prevMaterialId, reason = null) {
+        prereqPrevMaterialId = prevMaterialId || null;
+        const el = document.getElementById('prereqModalMessage');
+        if (el) el.textContent = getLockedMessage(reason);
+        const backBtn = document.getElementById('goBackToPrevBtn');
+        if (backBtn) backBtn.style.display = prereqPrevMaterialId ? '' : 'none';
+        const modalEl = document.getElementById('prereqModal');
+        if (!modalEl || !window.bootstrap?.Modal) {
+            alert(getLockedMessage(reason));
+            return;
+        }
+        new bootstrap.Modal(modalEl).show();
+    }
+
+    function showGuestDownloadModal() {
+        const modalEl = document.getElementById('guestDownloadModal');
+        if (!modalEl || !window.bootstrap?.Modal) {
+            window.location.href = '../signin.php';
+            return;
+        }
+
+        bootstrap.Modal.getOrCreateInstance(modalEl).show();
+    }
+
+    function enforcePrerequisitesFromButton(btnEl) {
+        if (!prereqBootstrapDone) {
+            // Fail open after showing/hiding loader quickly so clicks do not feel broken.
+            showPrereqLoader();
+            setTimeout(hidePrereqLoader, 600);
+            return true;
+        }
+
+        try {
+            const card = btnEl.closest('.material-card');
+            if (!card) return true;
+            const currentId = String(card.dataset.id || '');
+
+            if (IS_GUEST) {
+                return true;
             }
 
+            const previousMeta = getPreviousMaterialMeta(currentId);
+            if (!previousMeta) return true;
 
-            function createModal(title = "Viewer", extraClass = "") {
-                const modal = document.createElement('div');
-                modal.className = `modal fade ${extraClass}`;
-                modal.innerHTML = `
+            if (!isMaterialComplete(previousMeta.materialId)) {
+                showPrereqModal(previousMeta.materialId, 'not_finished');
+                return false;
+            }
+
+            const status = getPostTestStatusForMaterial(previousMeta);
+            if (!status) {
+                showPrereqModal(previousMeta.materialId, 'not_taken');
+                return false;
+            }
+
+            if (status.passed !== true) {
+                showPrereqModal(previousMeta.materialId, 'failed');
+                return false;
+            }
+
+            return true;
+        } catch (err) {
+            console.error('Prereq check failed:', err);
+            return true;
+        }
+    }
+
+    function escapeHtml(value) {
+        return String(value ?? '')
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#039;');
+    }
+
+    function getFileDisplayName(fileId) {
+        const item = document.querySelector(`[data-file-id="${fileId}"]`);
+        return item ? (item.dataset.fileName || 'File') : 'File';
+    }
+
+    function getYouTubeEmbed(url) {
+        if (!url) return '';
+        const regExp = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|&v=)([^#&?]*).*/;
+        const match = String(url).match(regExp);
+        const videoId = match && match[2].length === 11 ? match[2] : null;
+        return videoId ? `https://www.youtube.com/embed/${videoId}?autoplay=1&rel=0&modestbranding=1` : url;
+    }
+
+    async function getYouTubeTitle(videoUrl) {
+        // Non-blocking client-side only. Never call YouTube from PHP render.
+        try {
+            const videoIdMatch = String(videoUrl || '').match(/(?:youtu\.be\/|youtube\.com(?:\/embed\/|\/v\/|\/watch\?v=|\/watch\?.+&v=))([^"&?\/\s]{11})/i);
+            if (!videoIdMatch) return 'YouTube Video';
+            const videoId = videoIdMatch[1];
+            const response = await fetch(`https://www.youtube.com/oembed?url=https://www.youtube.com/watch?v=${videoId}&format=json`);
+            if (!response.ok) return 'YouTube Video';
+            const data = await response.json();
+            return data.title || 'YouTube Video';
+        } catch (err) {
+            return 'YouTube Video';
+        }
+    }
+
+    function createModal(title = 'Viewer', extraClass = '') {
+        const modal = document.createElement('div');
+        modal.className = `modal fade ${extraClass}`;
+        modal.innerHTML = `
             <div class="modal-dialog modal-xl modal-dialog-centered modal-dialog-scrollable">
                 <div class="modal-content" style="min-height: 70vh;">
                     <div class="modal-header">
-                        <h5 class="modal-title w-100 text-center">${title}</h5>
+                        <h5 class="modal-title w-100 text-center">${escapeHtml(title)}</h5>
                         <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
                     </div>
                     <div class="modal-body p-0" id="viewerBody">
                         <div class="d-flex justify-content-center align-items-center h-100 bg-light">
-                            <div class="spinner-border text-primary" role="status">
-                                <span class="visually-hidden">Loading...</span>
-                            </div>
+                            <div class="spinner-border text-primary" role="status"><span class="visually-hidden">Loading...</span></div>
                         </div>
                     </div>
                 </div>
             </div>`;
-                document.body.appendChild(modal);
-                return modal;
+        document.body.appendChild(modal);
+        return modal;
+    }
+
+    function registerCleanup(fn) {
+        if (typeof fn === 'function') __progressState.cleanups.push(fn);
+    }
+
+    function runAndClearCleanups() {
+        try {
+            __progressState.cleanups.forEach(fn => {
+                try { fn(); } catch (e) {}
+            });
+        } finally {
+            __progressState.cleanups = [];
+        }
+    }
+
+    function destroyModal() {
+        runAndClearCleanups();
+
+        if (currentModalInstance) {
+            try {
+                currentModalInstance.hide();
+                currentModalInstance.dispose();
+            } catch (e) {}
+            currentModalInstance = null;
+        }
+
+        if (currentModalElement) {
+            currentModalElement.querySelectorAll('iframe').forEach(iframe => iframe.src = 'about:blank');
+            currentModalElement.remove();
+            currentModalElement = null;
+        }
+
+        document.querySelectorAll('.modal-backdrop').forEach(b => b.remove());
+        document.body.classList.remove('modal-open');
+        document.body.style.overflow = '';
+        document.body.style.paddingRight = '';
+    }
+
+    function saveProgress(fid, pct) {
+        if (IS_GUEST) {
+            saveGuestProgressToBrowser(fid, pct);
+            return;
+        }
+
+        fetch('../partial/save_progress.php', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+            body: new URLSearchParams({ file_id: String(fid), progress: String(Math.round(clampPct(pct))) })
+        }).catch(() => {});
+    }
+
+    function clampPct(pct) {
+        pct = Number(pct);
+        if (!Number.isFinite(pct)) return 0;
+        return Math.max(0, Math.min(100, pct));
+    }
+
+    function saveProgressSmart(fileId, pct, opts = {}) {
+        const { force = false, minDelta = 2 } = opts;
+        pct = clampPct(pct);
+        const prev = __progressState.lastSavedPct.get(String(fileId)) ?? 0;
+        if (pct < prev) pct = prev;
+        const now = Date.now();
+        const lastAt = __progressState.lastSentAt.get(String(fileId)) ?? 0;
+        if (!force && now - lastAt < 3000) return;
+        if (!force && pct !== 100 && (pct - prev) < minDelta) return;
+        __progressState.lastSavedPct.set(String(fileId), pct);
+        __progressState.lastSentAt.set(String(fileId), now);
+        saveProgress(fileId, Math.round(pct));
+    }
+
+    function updateProgressUiSmart(fileId, pct) {
+        pct = Math.round(clampPct(pct));
+        const prevUi = __progressState.lastUiPct.get(String(fileId)) ?? 0;
+        if (pct < prevUi) pct = prevUi;
+        if (pct === prevUi) return;
+        __progressState.lastUiPct.set(String(fileId), pct);
+        updateProgressBar(fileId, pct);
+    }
+
+    function getResumableProgressPct(fileId) {
+        const uiPct = __progressState.lastUiPct.get(String(fileId));
+        const savedPct = __progressState.lastSavedPct.get(String(fileId));
+        const bestKnown = Math.max(
+            Number.isFinite(Number(uiPct)) ? Number(uiPct) : 0,
+            Number.isFinite(Number(savedPct)) ? Number(savedPct) : 0
+        );
+        return clampPct(bestKnown);
+    }
+
+    function updateProgressBar(fid, pct) {
+        fetch(`../partial/get_material_from_file.php?fid=${encodeURIComponent(fid)}`)
+            .then(r => r.json())
+            .then(d => {
+                if (!d?.material_id) return;
+                const cont = document.getElementById('prog-' + d.material_id);
+                if (!cont) return;
+
+                let item = cont.querySelector(`[data-fid="${fid}"]`);
+                const name = getFileDisplayName(fid);
+                const safePct = Math.round(clampPct(pct));
+
+                if (!item) {
+                    if (!cont.querySelector('.progress-header')) {
+                        cont.innerHTML = '<div class="progress-header"><i class="fas fa-chart-line"></i> Your Progress</div>';
+                    }
+                    cont.insertAdjacentHTML('beforeend', `
+                        <div class="progress-item" data-fid="${fid}">
+                            <div class="progress-item-left">
+                                <div class="progress-item-name" title="${escapeHtml(name)}">${escapeHtml(name)}</div>
+                                <div class="progress-bar-wrapper"><div class="progress-bar-fill" style="width:${safePct}%"></div></div>
+                            </div>
+                            <div class="progress-item-right">
+                                <span class="progress-percentage">${safePct}%</span>
+                                ${safePct >= 100 ? '<i class="fas fa-check-circle progress-check"></i>' : ''}
+                            </div>
+                        </div>`);
+                } else {
+                    item.querySelector('.progress-bar-fill').style.width = safePct + '%';
+                    item.querySelector('.progress-percentage').textContent = safePct + '%';
+                    if (safePct >= 100 && !item.querySelector('.progress-check')) {
+                        item.querySelector('.progress-item-right').insertAdjacentHTML('beforeend', '<i class="fas fa-check-circle progress-check"></i>');
+                    } else if (safePct < 100) {
+                        const check = item.querySelector('.progress-check');
+                        if (check) check.remove();
+                    }
+                }
+
+                refreshMaterialProgressState(d.material_id);
+            })
+            .catch(err => console.error('Failed to update progress UI:', err));
+    }
+
+    function setupPdfTimeTracking(fileId, url) {
+        const MIN_SECONDS = 60;
+        const MAX_SECONDS = 1800;
+        const SECONDS_PER_MB = 60;
+
+        async function getPdfSizeBytes(u) {
+            try {
+                const head = await fetch(u, { method: 'HEAD', cache: 'no-store' });
+                if (head?.ok) {
+                    const len = head.headers.get('content-length');
+                    if (len && !isNaN(Number(len))) return Number(len);
+                }
+            } catch (e) {}
+            return null;
+        }
+
+        function estimateSeconds(bytes) {
+            if (!bytes || bytes <= 0) return 600;
+            const mb = bytes / (1024 * 1024);
+            const est = Math.ceil(mb * SECONDS_PER_MB);
+            return Math.max(MIN_SECONDS, Math.min(MAX_SECONDS, est));
+        }
+
+        getPdfSizeBytes(url).then(bytes => {
+            startTimeBasedTracking(fileId, estimateSeconds(bytes), { minDelta: 1 });
+        });
+    }
+
+    function startTimeBasedTracking(fileId, secondsToComplete = 600, opts = {}) {
+        const { tickSeconds = 5, tickMs = 5000, minDelta = 2 } = opts;
+        const resumedPct = getResumableProgressPct(fileId);
+
+        if (resumedPct >= 100) {
+            updateProgressUiSmart(fileId, 100);
+            saveProgressSmart(fileId, 100, { force: true, minDelta });
+            return;
+        }
+
+        let seconds = (resumedPct / 100) * Math.max(1, secondsToComplete);
+        if (resumedPct > 0) updateProgressUiSmart(fileId, resumedPct);
+
+        const intervalId = setInterval(() => {
+            seconds += tickSeconds;
+            const pct = (seconds / Math.max(1, secondsToComplete)) * 100;
+            updateProgressUiSmart(fileId, pct);
+            saveProgressSmart(fileId, pct, { minDelta });
+        }, tickMs);
+
+        const warmup = resumedPct <= 0 ? setTimeout(() => {
+            updateProgressUiSmart(fileId, 1);
+            saveProgressSmart(fileId, 1, { force: true, minDelta });
+        }, 1200) : null;
+
+        registerCleanup(() => {
+            clearInterval(intervalId);
+            if (warmup) clearTimeout(warmup);
+            const pct = (seconds / Math.max(1, secondsToComplete)) * 100;
+            saveProgressSmart(fileId, pct, { force: true, minDelta });
+        });
+    }
+
+    function ensureYouTubeApi() {
+        if (window.YT && window.YT.Player) return Promise.resolve();
+        if (__ytApiPromise) return __ytApiPromise;
+
+        __ytApiPromise = new Promise(resolve => {
+            if (!document.querySelector('script[src*="youtube.com/iframe_api"]')) {
+                const tag = document.createElement('script');
+                tag.src = 'https://www.youtube.com/iframe_api';
+                document.head.appendChild(tag);
             }
 
-            function saveProgress(fid, pct) {
-                fetch('../partial/save_progress.php', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/x-www-form-urlencoded'
-                    },
-                    body: `file_id=${fid}&progress=${pct}`
-                }).catch(() => {});
-            }
-
-
-            const __progressState = {
-                lastSavedPct: new Map(),
-                lastSentAt: new Map(),
-                lastUiPct: new Map(),
-                cleanups: [],
+            const prev = window.onYouTubeIframeAPIReady;
+            window.onYouTubeIframeAPIReady = function() {
+                try { if (typeof prev === 'function') prev(); } catch (e) {}
+                resolve();
             };
 
-            function registerCleanup(fn) {
-                if (typeof fn === 'function') __progressState.cleanups.push(fn);
-            }
-
-            function runAndClearCleanups() {
-                try {
-                    __progressState.cleanups.forEach(fn => {
-                        try {
-                            fn();
-                        } catch (e) {}
-                    });
-                } finally {
-                    __progressState.cleanups = [];
+            const poll = setInterval(() => {
+                if (window.YT && window.YT.Player) {
+                    clearInterval(poll);
+                    resolve();
                 }
+            }, 200);
+            setTimeout(() => {
+                clearInterval(poll);
+                resolve();
+            }, 8000);
+        });
+
+        return __ytApiPromise;
+    }
+
+    function extractYouTubeId(url) {
+        if (!url) return null;
+        const match = String(url).match(/(?:youtu\.be\/|youtube\.com(?:\/embed\/|\/v\/|\/watch\?v=|\/watch\?.+&v=))([^"&?\/\s]{11})/i);
+        return match ? match[1] : null;
+    }
+
+    function renderYouTubePlayerHtml(fileId, url) {
+        const vid = extractYouTubeId(url);
+        const iframeId = `yt-player-${fileId}-${Date.now()}`;
+        const origin = encodeURIComponent(window.location.origin);
+        const src = vid ? `https://www.youtube.com/embed/${vid}?enablejsapi=1&origin=${origin}&rel=0&modestbranding=1` : getYouTubeEmbed(url);
+        return `
+            <div class="ratio ratio-16x9 h-100">
+                <iframe id="${iframeId}" data-yt-file-id="${fileId}" data-yt-video-id="${vid || ''}" src="${src}" allowfullscreen allow="autoplay; encrypted-media; picture-in-picture" style="border:none;"></iframe>
+            </div>`;
+    }
+
+    function setupYouTubeProgressTracking(fileId, url) {
+        const vid = extractYouTubeId(url);
+        if (!vid) {
+            startTimeBasedTracking(fileId, 420);
+            return;
+        }
+
+        ensureYouTubeApi().then(() => {
+            const iframe = document.querySelector(`iframe[data-yt-file-id="${fileId}"]`);
+            if (!iframe || !window.YT?.Player) {
+                startTimeBasedTracking(fileId, 420);
+                return;
             }
 
-            function clampPct(pct) {
-                pct = Number(pct);
-                if (!Number.isFinite(pct)) return 0;
-                return Math.max(0, Math.min(100, pct));
-            }
+            let player = null;
+            let tick = null;
 
-            function saveProgressSmart(fileId, pct, opts = {}) {
-                const {
-                    force = false, minDelta = 2
-                } = opts;
-
-                pct = clampPct(pct); // keep as float for better sensitivity
-                const prev = __progressState.lastSavedPct.get(String(fileId)) ?? 0;
-                if (pct < prev) pct = prev;
-
-                const now = Date.now();
-                const lastAt = __progressState.lastSentAt.get(String(fileId)) ?? 0;
-
-                // throttle: at most 1 request per 3 seconds (unless forced)
-                if (!force && now - lastAt < 3000) return;
-
-                // only save if it moved forward by at least `minDelta`% (unless forced or completed)
-                if (!force && pct !== 100 && (pct - prev) < minDelta) return;
-
-                __progressState.lastSavedPct.set(String(fileId), pct);
-                __progressState.lastSentAt.set(String(fileId), now);
-
-                // server expects a whole number percentage
-                saveProgress(fileId, Math.round(pct));
-            }
-
-
-            function updateProgressUiSmart(fileId, pct) {
-                pct = Math.round(clampPct(pct));
-                const prevUi = __progressState.lastUiPct.get(String(fileId)) ?? 0;
-                if (pct < prevUi) pct = prevUi;
-                if (pct === prevUi) return;
-
-                __progressState.lastUiPct.set(String(fileId), pct);
-                updateProgressBar(fileId, pct);
-            }
-
-            function startTimeBasedTracking(fileId, secondsToComplete = 600, opts = {}) {
-                const {
-                    tickSeconds = 5, tickMs = 5000, minDelta = 2
-                } = opts;
-
-                let seconds = 0;
-
-                const intervalId = setInterval(() => {
-                    seconds += tickSeconds;
-
-                    const pct = (seconds / Math.max(1, secondsToComplete)) * 100;
-                    updateProgressUiSmart(fileId, pct);
-                    saveProgressSmart(fileId, pct, {
-                        minDelta
-                    });
-                }, tickMs);
-
-                const warmup = setTimeout(() => {
-                    updateProgressUiSmart(fileId, 1);
-                    saveProgressSmart(fileId, 1, {
-                        force: true,
-                        minDelta
-                    });
-                }, 1200);
-
-                registerCleanup(() => {
-                    clearInterval(intervalId);
-                    clearTimeout(warmup);
-                    const pct = (seconds / Math.max(1, secondsToComplete)) * 100;
-                    saveProgressSmart(fileId, pct, {
-                        force: true,
-                        minDelta
-                    });
-                });
-            }
-
-
-            let __ytApiPromise = null;
-
-            function ensureYouTubeApi() {
-                if (window.YT && window.YT.Player) return Promise.resolve();
-
-                if (__ytApiPromise) return __ytApiPromise;
-
-                __ytApiPromise = new Promise((resolve) => {
-                    if (!document.querySelector('script[src*="youtube.com/iframe_api"]')) {
-                        const tag = document.createElement('script');
-                        tag.src = 'https://www.youtube.com/iframe_api';
-                        document.head.appendChild(tag);
-                    }
-
-                    const prev = window.onYouTubeIframeAPIReady;
-                    window.onYouTubeIframeAPIReady = function() {
-                        try {
-                            if (typeof prev === 'function') prev();
-                        } catch (e) {}
-                        resolve();
-                    };
-
-                    const poll = setInterval(() => {
-                        if (window.YT && window.YT.Player) {
-                            clearInterval(poll);
-                            resolve();
+            try {
+                player = new YT.Player(iframe.id, {
+                    events: {
+                        onReady: () => {
+                            tick = setInterval(() => {
+                                try {
+                                    const dur = player.getDuration?.() || 0;
+                                    const cur = player.getCurrentTime?.() || 0;
+                                    if (!dur) return;
+                                    const pct = (cur / dur) * 100;
+                                    updateProgressUiSmart(fileId, pct);
+                                    saveProgressSmart(fileId, pct);
+                                } catch (e) {}
+                            }, 1000);
+                        },
+                        onStateChange: (e) => {
+                            try {
+                                const dur = player.getDuration?.() || 0;
+                                const cur = player.getCurrentTime?.() || 0;
+                                if (dur) {
+                                    const pct = (cur / dur) * 100;
+                                    updateProgressUiSmart(fileId, pct);
+                                    saveProgressSmart(fileId, pct, { force: true });
+                                }
+                                if (e.data === YT.PlayerState.ENDED) {
+                                    updateProgressUiSmart(fileId, 100);
+                                    saveProgressSmart(fileId, 100, { force: true });
+                                }
+                            } catch (err) {}
                         }
-                    }, 200);
-                    setTimeout(() => clearInterval(poll), 8000);
+                    }
                 });
-
-                return __ytApiPromise;
+            } catch (e) {
+                startTimeBasedTracking(fileId, 420);
+                return;
             }
 
-            function extractYouTubeId(url) {
-                if (!url) return null;
-                const match = String(url).match(/(?:youtu\.be\/|youtube\.com(?:\/embed\/|\/v\/|\/watch\?v=|\/watch\?.+&v=))([^"&?\/\s]{11})/i);
-                return match ? match[1] : null;
+            registerCleanup(() => {
+                if (tick) clearInterval(tick);
+                try {
+                    const dur = player?.getDuration?.() || 0;
+                    const cur = player?.getCurrentTime?.() || 0;
+                    if (dur) saveProgressSmart(fileId, (cur / dur) * 100, { force: true });
+                } catch (e) {}
+                try { player?.destroy?.(); } catch (e) {}
+            });
+        });
+    }
+
+    async function openSingleFile(fid) {
+        try {
+            const r = await fetch(`../partial/get_one_file.php?fid=${encodeURIComponent(fid)}`, { cache: 'no-store' });
+            const d = await r.json();
+
+            if (!d?.type) {
+                alert('File not found');
+                return;
             }
 
-            function renderYouTubePlayerHtml(fileId, url) {
-                const vid = extractYouTubeId(url);
-                const iframeId = `yt-player-${fileId}-${Date.now()}`;
-                const origin = encodeURIComponent(window.location.origin);
-                const src = vid ?
-                    `https://www.youtube.com/embed/${vid}?enablejsapi=1&origin=${origin}&rel=0&modestbranding=1` :
-                    getYouTubeEmbed(url);
+            const title = d.title || (d.type === 'pdf' ? 'PDF Document' : 'Video Lesson');
+            const modal = createModal(title, 'custom-modal');
+            const body = modal.querySelector('#viewerBody');
 
-                return `
-                    <div class="ratio ratio-16x9 h-100">
-                        <iframe
-                            id="${iframeId}"
-                            data-yt-file-id="${fileId}"
-                            data-yt-video-id="${vid || ''}"
-                            src="${src}"
-                            allowfullscreen
-                            allow="autoplay; encrypted-media; picture-in-picture"
-                            style="border:none;"></iframe>
-                    </div>
-                `;
+            if (d.type === 'pdf') {
+                body.innerHTML = `<iframe src="../${d.path}" style="width:100%;height:100%;border:none;"></iframe>`;
+                setupPdfTimeTracking(fid, `../${d.path}`);
+            } else if (d.type === 'youtube' || d.type === 'video') {
+                body.innerHTML = renderYouTubePlayerHtml(fid, d.path);
+                setupYouTubeProgressTracking(fid, d.path);
+            } else {
+                body.innerHTML = '<div class="p-4 text-center text-muted">Unsupported file type.</div>';
             }
 
-            function setupYouTubeProgressTracking(fileId, url) {
-                const vid = extractYouTubeId(url);
-                // If can't extract id, we can't use API reliably, fallback to marking 100 after some watch time.
-                if (!vid) {
-                    startTimeBasedTracking(fileId, 420);
+            currentModalInstance = new bootstrap.Modal(modal, { backdrop: 'static', keyboard: false });
+            currentModalElement = modal;
+            modal.addEventListener('hidden.bs.modal', destroyModal, { once: true });
+            currentModalInstance.show();
+        } catch (err) {
+            console.error('Error loading content:', err);
+            alert('Error loading content');
+        }
+    }
+
+    window.openFile = function(fid) {
+        destroyModal();
+        openSingleFile(fid);
+    };
+
+    function bindEvents() {
+        document.querySelectorAll('.topic-tab').forEach(tab => {
+            tab.addEventListener('click', () => {
+                const target = tab.dataset.topic;
+                document.querySelectorAll('.topic-tab').forEach(t => t.classList.remove('active'));
+                tab.classList.add('active');
+                document.querySelectorAll('.topic-section').forEach(sec => sec.classList.toggle('active', sec.dataset.topic === target));
+            });
+        });
+
+        const goBackBtn = document.getElementById('goBackToPrevBtn');
+        if (goBackBtn) {
+            goBackBtn.addEventListener('click', () => {
+                const mid = prereqPrevMaterialId;
+                const modalEl = document.getElementById('prereqModal');
+                const inst = modalEl ? bootstrap.Modal.getInstance(modalEl) : null;
+                inst?.hide();
+
+                if (!mid) return;
+                const btn = document.querySelector(`.start-learning-btn[data-id="${mid}"]`);
+                if (!btn) return;
+                bypassPrereqOnce = true;
+                btn.click();
+            });
+        }
+
+        document.querySelectorAll('.view-btn').forEach(btn => {
+            btn.addEventListener('click', async e => {
+                e.preventDefault();
+                e.stopPropagation();
+
+                if (!(await ensureGuestModuleSelectionFromTrigger(btn))) {
+                    showPrereqModal(null, 'guest_signup_required');
                     return;
                 }
 
-                ensureYouTubeApi().then(() => {
-                    const iframe = document.querySelector(`iframe[data-yt-file-id="${fileId}"]`);
-                    if (!iframe) return;
+                if (!bypassPrereqOnce) {
+                    if (!enforcePrerequisitesFromButton(btn)) return;
+                } else {
+                    bypassPrereqOnce = false;
+                }
 
-                    let player = null;
-                    let tick = null;
+                destroyModal();
+                openSingleFile(btn.dataset.fid);
+            });
+        });
 
-                    try {
-                        player = new YT.Player(iframe.id, {
-                            events: {
-                                onReady: () => {
-                                    tick = setInterval(() => {
-                                        try {
-                                            const dur = player.getDuration?.() || 0;
-                                            const cur = player.getCurrentTime?.() || 0;
-                                            if (!dur) return;
+        document.querySelectorAll('.download-btn').forEach(link => {
+            link.addEventListener('click', async e => {
+                e.stopPropagation();
 
-                                            const pct = (cur / dur) * 100;
-                                            updateProgressUiSmart(fileId, pct);
-                                            saveProgressSmart(fileId, pct);
-                                        } catch (e) {}
-                                    }, 1000);
-                                },
-                                onStateChange: (e) => {
-                                    try {
-                                        const dur = player.getDuration?.() || 0;
-                                        const cur = player.getCurrentTime?.() || 0;
-                                        if (dur) {
-                                            const pct = (cur / dur) * 100;
-                                            updateProgressUiSmart(fileId, pct);
-                                            saveProgressSmart(fileId, pct, {
-                                                force: true
-                                            });
-                                        }
-                                        if (e.data === YT.PlayerState.ENDED) {
-                                            updateProgressUiSmart(fileId, 100);
-                                            saveProgressSmart(fileId, 100, {
-                                                force: true
-                                            });
-                                        }
-                                    } catch (err) {}
-                                }
-                            }
-                        });
-                    } catch (e) {
-                        // Fallback: time-based
-                        startTimeBasedTracking(fileId, 420);
+                if (IS_GUEST) {
+                    e.preventDefault();
+                    showGuestDownloadModal();
+                    return;
+                }
+
+                if (!(await ensureGuestModuleSelectionFromTrigger(link))) {
+                    e.preventDefault();
+                    showPrereqModal(null, 'guest_signup_required');
+                    return;
+                }
+
+                if (!bypassPrereqOnce) {
+                    if (!enforcePrerequisitesFromButton(link)) {
+                        e.preventDefault();
+                        return;
+                    }
+                } else {
+                    bypassPrereqOnce = false;
+                }
+            });
+        });
+
+        document.querySelectorAll('.start-learning-btn').forEach(btn => {
+            btn.addEventListener('click', async e => {
+                e.preventDefault();
+                e.stopPropagation();
+
+                if (!(await ensureGuestModuleSelectionFromTrigger(btn))) {
+                    showPrereqModal(null, 'guest_signup_required');
+                    return;
+                }
+
+                if (!bypassPrereqOnce) {
+                    if (!enforcePrerequisitesFromButton(btn)) return;
+                } else {
+                    bypassPrereqOnce = false;
+                }
+
+                const mid = btn.dataset.id;
+                const card = btn.closest('.material-card');
+                if (!mid || !card) return;
+                destroyModal();
+
+                try {
+                    const resp = await fetch(`../partial/get_material_files.php?id=${encodeURIComponent(mid)}`, { cache: 'no-store' });
+                    const data = await resp.json();
+                    const materialTitle = card.querySelector('.card-title')?.textContent?.trim() || 'Study Material';
+                    const materialDesc = card.querySelector('.card-description')?.textContent?.trim() || '';
+                    const pdfs = Array.isArray(data.pdfs) ? data.pdfs : [];
+                    const videos = Array.isArray(data.videos) ? data.videos : [];
+
+                    if (!pdfs.length && !videos.length) {
+                        alert('No content available.');
                         return;
                     }
 
-                    registerCleanup(() => {
-                        if (tick) clearInterval(tick);
-                        try {
-                            const dur = player?.getDuration?.() || 0;
-                            const cur = player?.getCurrentTime?.() || 0;
-                            if (dur) saveProgressSmart(fileId, (cur / dur) * 100, {
-                                force: true
-                            });
-                        } catch (e) {}
-                        try {
-                            player?.destroy?.();
-                        } catch (e) {}
-                    });
-                });
-            }
+                    const modal = createModal(materialTitle, 'custom-modal');
+                    const body = modal.querySelector('#viewerBody');
+                    let tabsHtml = '';
+                    let panesHtml = '';
+                    const hasPdfs = pdfs.length > 0;
+                    const hasVideos = videos.length > 0;
 
-            function updateProgressBar(fid, pct) {
-                fetch(`../partial/get_material_from_file.php?fid=${fid}`)
-                    .then(r => r.json())
-                    .then(d => {
-                        if (!d?.material_id) return;
-
-                        const cont = document.getElementById('prog-' + d.material_id);
-                        if (!cont) return;
-
-                        let item = cont.querySelector(`[data-fid="${fid}"]`);
-                        const name = getFileDisplayName(fid);
-
-                        if (!item) {
-                            if (!cont.querySelector('.progress-header')) {
-                                cont.innerHTML = `<div class="progress-header"><i class="fas fa-chart-line"></i> Your Progress</div>`;
-                            }
-
-                            cont.insertAdjacentHTML('beforeend', `
-                        <div class="progress-item" data-fid="${fid}">
-                            <div class="progress-item-left">
-                                <div class="progress-item-name" title="${name}">${name}</div>
-                                <div class="progress-bar-wrapper">
-                                    <div class="progress-bar-fill" style="width:${pct}%"></div>
-                                </div>
-                            </div>
-                            <div class="progress-item-right">
-                                <span class="progress-percentage">${pct}%</span>
-                                ${pct >= 100 ? '<i class="fas fa-check-circle progress-check"></i>' : ''}
-                            </div>
-                        </div>`);
-                        } else {
-                            item.querySelector('.progress-bar-fill').style.width = pct + '%';
-                            item.querySelector('.progress-percentage').textContent = pct + '%';
-
-                            if (pct >= 100 && !item.querySelector('.progress-check')) {
-                                item.querySelector('.progress-item-right').insertAdjacentHTML('beforeend',
-                                    '<i class="fas fa-check-circle progress-check"></i>');
-                            }
-                        }
-                    });
-            }
-            fetch('../partial/get_progress.php')
-                .then(r => r.json())
-                .then(({
-                    data
-                }) => {
-                    if (!Array.isArray(data)) return;
-
-                    const materialMap = new Map();
-
-                    data.forEach(mat => {
-                        materialMap.set(String(mat.id), mat.files);
-                    });
-
-                    document.querySelectorAll('.material-card').forEach(card => {
-                        const mid = card.dataset.id;
-                        const cont = document.getElementById('prog-' + mid);
-                        const files = materialMap.get(mid);
-
-                        if (!cont || !files || files.length === 0) return;
-
-                        cont.innerHTML = `
-        <div class="progress-header">
-          <i class="fas fa-chart-line"></i> Your Progress
-        </div>
-      `;
-
-                        files.forEach(p => {
-                            const name = getFileDisplayName(p.id);
-
-                            cont.insertAdjacentHTML('beforeend', `
-          <div class="progress-item" data-fid="${p.id}">
-            <div class="progress-item-left">
-              <div class="progress-item-name" title="${name}">${name}</div>
-              <div class="progress-bar-wrapper">
-                <div class="progress-bar-fill" style="width:${p.progress}%"></div>
-              </div>
-            </div>
-            <div class="progress-item-right">
-              <span class="progress-percentage">${p.progress}%</span>
-              ${p.progress >= 100 
-                  ? '<i class="fas fa-check-circle progress-check"></i>' 
-                  : ''}
-            </div>
-          </div>
-        `);
+                    if (hasPdfs) {
+                        tabsHtml += `<li class="nav-item"><a class="nav-link active" data-bs-toggle="tab" href="#tab-pdfs">PDFs (${pdfs.length})</a></li>`;
+                        let list = '';
+                        pdfs.forEach(f => {
+                            const fname = f.title || String(f.path || '').split('/').pop().replace(/^pdf_[a-f0-9]{11}\./i, '').replace(/\.pdf$/i, '').replace(/_/g, ' ');
+                            list += `
+                                <div class="file-list-item pdf" data-open-file-id="${f.id}">
+                                    <i class="fas fa-file-pdf file-icon"></i>
+                                    <div class="file-info"><div class="file-title">${escapeHtml(fname)}</div></div>
+                                    <i class="fas fa-arrow-right action-icon"></i>
+                                </div>`;
                         });
+                        panesHtml += `<div class="tab-pane fade show active" id="tab-pdfs">${list}</div>`;
+                    }
 
-                        // Cache computed progress for prerequisite checks
-                        try {
-                            const vals = files.map(f => Number(f.progress || 0)).filter(v => Number.isFinite(v));
-                            const avg = vals.length ? (vals.reduce((a, b) => a + b, 0) / vals.length) : 0;
-                            const complete = vals.length ? vals.every(v => v >= 100) : false;
-                            MATERIAL_PROGRESS.set(String(mid), {
-                                avg,
-                                complete
-                            });
-                        } catch (e) {}
+                    if (hasVideos) {
+                        const active = !hasPdfs ? ' active' : '';
+                        tabsHtml += `<li class="nav-item"><a class="nav-link${active}" data-bs-toggle="tab" href="#tab-videos">Videos (${videos.length})</a></li>`;
+                        let list = '';
+                        for (const v of videos) {
+                            let displayTitle = v.title;
+                            if (!displayTitle || displayTitle.trim() === '' || displayTitle === 'Untitled Video' || displayTitle === 'YouTube Video') {
+                                displayTitle = await getYouTubeTitle(v.path);
+                            }
+                            list += `
+                                <div class="file-list-item video" data-open-file-id="${v.id}">
+                                    <i class="fas fa-play-circle file-icon"></i>
+                                    <div class="file-info"><div class="file-title">${escapeHtml(displayTitle)}</div></div>
+                                    <i class="fas fa-arrow-right action-icon"></i>
+                                </div>`;
+                        }
+                        const showActive = !hasPdfs ? ' show active' : '';
+                        panesHtml += `<div class="tab-pane fade${showActive}" id="tab-videos">${list}</div>`;
+                    }
+
+                    body.innerHTML = `
+                        <div class="h-100 d-flex flex-column">
+                            <div class="border-bottom bg-white px-3 py-3 px-md-4">
+                                <h4 class="mb-3 fw-bold text-center text-dark">${escapeHtml(materialTitle)}</h4>
+                                <div class="material-desc">${escapeHtml(materialDesc || 'Select a resource to begin studying.')}</div>
+                            </div>
+                            <ul class="nav nav-tabs px-2 pt-2 border-bottom-0">${tabsHtml}</ul>
+                            <div class="tab-content flex-grow-1 overflow-auto p-2 p-md-3">${panesHtml}</div>
+                        </div>`;
+
+                    body.querySelectorAll('[data-open-file-id]').forEach(item => {
+                        item.addEventListener('click', () => {
+                            window.openFile(item.dataset.openFileId);
+                        });
                     });
 
-                    progressReady = true;
-                })
-                .catch(err => {
-                    console.error('Progress fetch error:', err);
-                    progressReady = true;
-                });
-
-            // document.querySelectorAll('.material-card').forEach(card => {
-            //     const mid = card.dataset.id;
-            //     fetch(`../partial/get_progress.php?material_id=${mid}`)
-            //         .then(r => r.json())
-            //         .then(data => {
-            //             const cont = document.getElementById('prog-' + mid);
-            //             if (!cont || !Array.isArray(data) || data.length === 0) return;
-
-            //             cont.innerHTML = `<div class="progress-header"><i class="fas fa-chart-line"></i> Your Progress</div>`;
-
-            //             data.forEach(p => {
-            //                 const name = getFileDisplayName(p.file_id);
-            //                 cont.insertAdjacentHTML('beforeend', `
-            //                     <div class="progress-item" data-fid="${p.file_id}">
-            //                         <div class="progress-item-left">
-            //                             <div class="progress-item-name" title="${name}">${name}</div>
-            //                             <div class="progress-bar-wrapper">
-            //                                 <div class="progress-bar-fill" style="width:${p.progress}%"></div>
-            //                             </div>
-            //                         </div>
-            //                         <div class="progress-item-right">
-            //                             <span class="progress-percentage">${p.progress}%</span>
-            //                             ${p.progress >= 100 ? '<i class="fas fa-check-circle progress-check"></i>' : ''}
-            //                         </div>
-            //                     </div>`);
-            //             });
-            //         });
-            // });
+                    currentModalInstance = new bootstrap.Modal(modal, { backdrop: 'static', keyboard: false });
+                    currentModalElement = modal;
+                    currentModalInstance.show();
+                } catch (err) {
+                    console.error('Error loading materials:', err);
+                    alert('Error loading materials');
+                }
+            });
         });
-    </script>
-</body>
+    }
 
-</html>
+    bindEvents();
+    bootstrapStudyMaterials().finally(() => {
+        prereqBootstrapDone = true;
+        postTestReady = true;
+        progressReady = true;
+        setLearningButtonsDisabled(false);
+        hidePrereqLoader();
+    });
+});
+</script>

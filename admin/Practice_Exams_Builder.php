@@ -51,11 +51,11 @@ if (!isset($_SESSION['user_id']) || !in_array(($_SESSION['role'] ?? ''), ['admin
     <title>
         <?php
         if ($isSuperAdmin) {
-            echo "ChemEase Super Admin Panel - Users";
+            echo "ChemEase Super Admin Panel - Exam Builder";
         } elseif ($isAdmin) {
-            echo "ChemEase Admin Panel - Users";
+            echo "ChemEase Admin Panel - Exam Builder";
         } else {
-            echo "ChemEase - Users";
+            echo "ChemEase - Exam Builder";
         }
         ?>
     </title>
@@ -307,57 +307,48 @@ if (!isset($_SESSION['user_id']) || !in_array(($_SESSION['role'] ?? ''), ['admin
             margin-top: 5px;
         }
 
-        .exam-builder-modal .modal-dialog {
-            max-width: 95%;
-            height: calc(100vh - 3.5rem);
-            margin: 1.75rem auto;
-        }
-
-        .exam-builder-modal .modal-content {
+        .exam-builder-page-shell .modal-content {
             background: #ffffff;
             color: var(--builder-text);
             border: 1px solid var(--builder-border);
             border-radius: 24px;
-            height: 100%;
             overflow: hidden;
             box-shadow: 0 24px 60px rgba(15, 23, 42, 0.12);
         }
 
-        .exam-builder-modal .modal-header,
-        .exam-builder-modal .modal-footer {
+        .exam-builder-page-shell .modal-header,
+        .exam-builder-page-shell .modal-footer {
             border-color: var(--builder-border);
             background: #f8fbfc;
         }
 
-        .exam-builder-modal .modal-header {
+        .exam-builder-page-shell .modal-header {
             padding: 18px 24px;
         }
 
-        .exam-builder-modal .modal-title {
+        .exam-builder-page-shell .modal-title {
             font-weight: 700;
             letter-spacing: 0.02em;
             color: var(--builder-heading);
         }
 
-        .exam-builder-modal .btn-close {
+        .exam-builder-page-shell .btn-close {
             opacity: .65;
         }
 
-        .exam-builder-modal .btn-close:hover {
+        .exam-builder-page-shell .btn-close:hover {
             opacity: 1;
         }
 
-        .exam-builder-modal .modal-body {
+        .exam-builder-page-shell .modal-body {
             background: linear-gradient(180deg, #fbfeff 0%, #f5f8fb 100%);
             padding: 20px;
-            overflow-y: auto;
-            overflow-x: visible;
         }
 
         .builder-shell {
             display: grid;
-            grid-template-columns: 280px minmax(0, 1fr) 280px;
-            gap: 18px;
+            grid-template-columns: 240px minmax(0, 1fr) 360px;
+            gap: 20px;
             min-height: 72vh;
             align-items: start;
         }
@@ -368,7 +359,6 @@ if (!isset($_SESSION['user_id']) || !in_array(($_SESSION['role'] ?? ''), ['admin
             background: var(--builder-bg);
             border: 1px solid var(--builder-border);
             border-radius: 18px;
-            min-height: 100%;
             box-shadow: var(--builder-shadow-sm);
         }
 
@@ -379,17 +369,16 @@ if (!isset($_SESSION['user_id']) || !in_array(($_SESSION['role'] ?? ''), ['admin
 
         .builder-sidebar {
             position: sticky;
-            top: 0;
+            top: 20px;
             align-self: start;
             height: fit-content;
-            max-height: calc(100vh - 180px);
+            max-height: calc(100vh - 120px);
             overflow: hidden;
         }
 
         .builder-main {
             padding: 22px;
             overflow: visible;
-            min-height: fit-content;
         }
 
         .builder-section-title {
@@ -405,7 +394,7 @@ if (!isset($_SESSION['user_id']) || !in_array(($_SESSION['role'] ?? ''), ['admin
             display: flex;
             flex-direction: column;
             gap: 10px;
-            max-height: calc(100vh - 360px);
+            max-height: calc(100vh - 250px);
             overflow-y: auto;
             overflow-x: hidden;
             padding-right: 6px;
@@ -804,76 +793,153 @@ if (!isset($_SESSION['user_id']) || !in_array(($_SESSION['role'] ?? ''), ['admin
             color: var(--builder-heading);
         }
 
-        .exam-builder-modal .alert-info {
+        .exam-builder-page-shell .alert-info {
             background: #eefbfd !important;
             color: var(--builder-text) !important;
             border: 1px solid rgba(26, 163, 184, 0.18) !important;
         }
 
-        .exam-builder-modal .text-muted {
+        .exam-builder-page-shell .text-muted {
             color: var(--builder-muted) !important;
         }
 
-        .exam-builder-modal .form-check-input:checked {
+        .exam-builder-page-shell .form-check-input:checked {
             background-color: var(--builder-primary);
             border-color: var(--builder-primary);
         }
 
-        .exam-builder-modal .btn-success {
+        .exam-builder-page-shell .btn-success {
             background-color: var(--builder-success);
             border-color: var(--builder-success);
         }
 
-        .exam-builder-modal .btn-success:hover {
+        .exam-builder-page-shell .btn-success:hover {
             background-color: #188347;
             border-color: #188347;
         }
 
-        .exam-builder-modal .btn-outline-primary {
+        .exam-builder-page-shell .btn-outline-primary {
             color: var(--builder-primary-dark);
             border-color: rgba(26, 163, 184, 0.35);
         }
 
-        .exam-builder-modal .btn-outline-primary:hover {
+        .exam-builder-page-shell .btn-outline-primary:hover {
             background: var(--builder-primary);
             border-color: var(--builder-primary);
             color: #ffffff;
         }
 
-        .exam-builder-modal .btn-outline-danger {
+        .exam-builder-page-shell .btn-outline-danger {
             color: var(--builder-danger);
             border-color: rgba(220, 53, 69, 0.25);
         }
 
-        .exam-builder-modal .btn-outline-danger:hover {
+        .exam-builder-page-shell .btn-outline-danger:hover {
             background: var(--builder-danger);
             color: #ffffff;
         }
+        
+        .builder-right-tip {
+            background: #fff8e8;
+            border: 1px solid #f5d48a;
+            border-left: 5px solid #f0ad4e;
+            border-radius: 14px;
+            padding: 18px;
+            display: flex;
+            flex-direction: column;
+            gap: 14px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+        }
+        
+        .builder-tip-header {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            font-size: 16px;
+            color: #8a5a00;
+        }
+        
+        .builder-tip-header i {
+            font-size: 18px;
+            color: #f0ad4e;
+        }
+        
+        .builder-tip-text {
+            font-size: 13px;
+            color: #5f5f5f;
+            line-height: 1.6;
+            margin: 0;
+        }
+        
+        .builder-tip-item {
+            background: #ffffff;
+            border: 1px solid #f1e2b8;
+            border-radius: 10px;
+            padding: 12px;
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+        }
+        
+        .builder-tip-label {
+            font-size: 13px;
+            font-weight: 700;
+            color: #8a5a00;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+        
+        .builder-tip-item small {
+            color: #444;
+            font-size: 12px;
+            line-height: 1.5;
+        }
+        
+        .builder-tip-example {
+            color: #7a7a7a;
+            font-style: italic;
+        }
+        
+        .builder-tip-warning {
+            background: #fff0f0;
+            border: 1px solid #f3c2c2;
+            color: #b54747;
+            padding: 10px 12px;
+            border-radius: 8px;
+            font-size: 12px;
+            line-height: 1.5;
+        }
+        
+        .quick-info-card {
+            background: linear-gradient(135deg, #eefbfd 0%, #f8fdff 100%);
+            border: 1px solid rgba(26, 163, 184, 0.2);
+            border-left: 5px solid var(--builder-primary);
+        }
+        
+        .quick-info-card .builder-tip-header {
+            color: var(--builder-primary-dark);
+        }
+        
+        .quick-info-card .builder-tip-header i {
+            color: var(--builder-primary);
+        }
+        
+        .quick-info-card .builder-tip-item {
+            border-color: rgba(26, 163, 184, 0.15);
+            background: rgba(255, 255, 255, 0.9);
+        }
+        
+        .quick-info-card .builder-tip-label {
+            color: var(--builder-primary-dark);
+        }
 
         @media (max-width: 1400px) {
-            .exam-builder-modal .modal-dialog {
-                max-width: 97%;
-            }
-
             .builder-shell {
-                grid-template-columns: 240px minmax(0, 1fr) 240px;
+                grid-template-columns: 220px minmax(0, 1fr) 320px;
             }
         }
 
         @media (max-width: 1199px) {
-            .exam-builder-modal .modal-dialog {
-                height: auto;
-                margin: 1rem auto;
-            }
-
-            .exam-builder-modal .modal-content {
-                height: auto;
-            }
-
-            .exam-builder-modal .modal-body {
-                overflow: visible;
-            }
-
             .builder-shell {
                 grid-template-columns: 1fr;
             }
@@ -882,7 +948,6 @@ if (!isset($_SESSION['user_id']) || !in_array(($_SESSION['role'] ?? ''), ['admin
             .builder-rightbar {
                 position: static;
                 top: auto;
-                height: auto;
                 max-height: none;
                 overflow: visible;
                 order: 2;
@@ -894,7 +959,6 @@ if (!isset($_SESSION['user_id']) || !in_array(($_SESSION['role'] ?? ''), ['admin
 
             .builder-main {
                 order: 1;
-                overflow: visible;
             }
         }
 
@@ -920,6 +984,81 @@ if (!isset($_SESSION['user_id']) || !in_array(($_SESSION['role'] ?? ''), ['admin
                 width: 100%;
             }
         }
+
+        .exam-builder-page {
+            padding: 24px;
+        }
+
+        .builder-page-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            gap: 16px;
+            margin-bottom: 22px;
+            flex-wrap: wrap;
+        }
+
+        .builder-page-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            padding: 6px 12px;
+            border-radius: 999px;
+            background: #eefbfd;
+            color: var(--builder-primary-dark);
+            border: 1px solid rgba(26, 163, 184, 0.16);
+            font-size: 12px;
+            font-weight: 700;
+            margin-bottom: 12px;
+        }
+
+        .builder-page-title {
+            margin: 0 0 6px;
+            color: var(--builder-heading);
+            font-size: 32px;
+            font-weight: 800;
+        }
+
+        .builder-page-subtitle {
+            margin: 0;
+            color: var(--builder-muted);
+            max-width: 720px;
+        }
+
+        .builder-page-actions {
+            display: flex;
+            gap: 12px;
+            flex-wrap: wrap;
+        }
+
+        .builder-page-link {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            padding: 11px 16px;
+            border-radius: 12px;
+            border: 1px solid var(--builder-border);
+            background: #ffffff;
+            color: var(--builder-text);
+            text-decoration: none;
+            font-weight: 700;
+            box-shadow: 0 10px 24px rgba(15, 23, 42, 0.05);
+        }
+
+        .builder-page-link:hover {
+            color: var(--builder-primary-dark);
+            border-color: rgba(26, 163, 184, 0.28);
+            background: #f8fbfc;
+        }
+
+        .builder-page-card {
+            background: transparent;
+        }
+
+        .exam-builder-page-shell {
+            overflow: visible;
+        }
+
     </style>
 </head>
 <body>
@@ -1014,59 +1153,20 @@ if (!isset($_SESSION['user_id']) || !in_array(($_SESSION['role'] ?? ''), ['admin
     </div>
 
     <div class="main-content">
-        <div class="practice-exams-container">
-            <div class="page-header">
-                <h1 class="page-title">Practice Exams</h1>
-            </div>
-            <div class="stats-row" id="statsRow">
-                <div class="stat-box total-exams"><div class="stat-icon"><i class="fas fa-clipboard-list"></i></div><h2 class="stat-number">0</h2><p class="stat-label">Total Exams</p><p class="stat-subtitle">Across 5 categories</p></div>
-                <div class="stat-box total-attempts"><div class="stat-icon"><i class="fas fa-chart-line"></i></div><h2 class="stat-number">0</h2><p class="stat-label">Total Attempts</p><p class="stat-subtitle"></p></div>
-                <div class="stat-box average-score"><div class="stat-icon"><i class="fas fa-star"></i></div><h2 class="stat-number">0%</h2><p class="stat-label">Average Score</p><p class="stat-subtitle">Based on 0 attempts</p></div>
-            </div>
-            <div class="exam-controls">
-                <div class="controls-row">
-                    <div class="search-box"><i class="fas fa-search search-icon"></i><input type="text" class="search-input" placeholder="Search exams..."></div>
-                    <div class="controls-buttons">
-                        <a href="Practice_Exams_Builder.php" class="btn-control btn-primary">
-    <i class="fas fa-plus"></i> ADD EXAMS
-</a>
-                    </div>
+        <div class="exam-builder-page">
+            <div class="builder-page-header">
+                <div>
+                    <div class="builder-page-badge"><i class="fas fa-clipboard-list"></i> Practice Exams</div>
+                    <h1 class="builder-page-title">Create Practice Exam</h1>
+                </div>
+                <div class="builder-page-actions">
+                    <a href="Practice_Exams.php" class="builder-page-link"><i class="fas fa-arrow-left me-2"></i>Back to Exams</a>
                 </div>
             </div>
-            <div class="exams-table-container">
-                <div class="table-responsive">
-                    <table class="exams-table">
-                        <thead>
-                            <tr>
-                                <th>Exam Title</th>
-                                <th>Topic</th>
-                                <th>Category</th>
-                                <th>Difficulty</th>
-                                <th>Questions</th>
-                                <th>Attempts</th>
-                                <th>Average Score</th>
-                                <th>Actions</th>
-                            </tr>
-                        </thead>
-                        <tbody id="examsTbody"></tbody>
-                    </table>
-                </div>
-            </div>
-        </div>
-    </div>
 
-    <div class="modal fade exam-builder-modal" id="addExamModal" tabindex="-1" data-bs-backdrop="static" data-bs-keyboard="false">
-        <div class="modal-dialog modal-xl">
-            <div class="modal-content">
-                <div class="modal-header">
-                    <div>
-                        <h5 class="modal-title" id="modalTitle">Create New Exam</h5>
-                        <div class="builder-muted mt-1">Styled to match the uploaded add-question reference while preserving your original components.</div>
-                    </div>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-                </div>
-                <div class="modal-body">
-                    <div class="progress-step d-flex justify-content-between mb-4">
+            <section class="exam-builder-page-shell" id="examBuilderPage">
+                <div class="builder-page-card">
+<div class="progress-step d-flex justify-content-between mb-4">
                         <div class="step active" onclick="showStep(1)">Basic Information</div>
                         <div class="step" onclick="showStep(2)">Add Questions</div>
                         <div class="step" onclick="showStep(3)">Review &amp; Create</div>
@@ -1102,7 +1202,6 @@ if (!isset($_SESSION['user_id']) || !in_array(($_SESSION['role'] ?? ''), ['admin
                                 <div class="builder-panel-card">
                                     <div class="builder-panel-heading">
                                         <h5>Basic Information</h5>
-                                        <span class="builder-muted">Keep the original fields, refreshed layout.</span>
                                     </div>
                                     <div class="row g-3">
                                         <div class="col-md-6">
@@ -1143,7 +1242,6 @@ if (!isset($_SESSION['user_id']) || !in_array(($_SESSION['role'] ?? ''), ['admin
                                 <div class="builder-panel-card">
                                     <div class="builder-panel-heading">
                                         <h6>Settings</h6>
-                                        <span class="builder-muted">Uses your original metadata fields.</span>
                                     </div>
                                     <div class="builder-settings-grid">
                                         <div>
@@ -1154,7 +1252,7 @@ if (!isset($_SESSION['user_id']) || !in_array(($_SESSION['role'] ?? ''), ['admin
                                         <div>
                                             <label class="form-label">Displayed Total Questions <span class="text-danger">*</span></label>
                                             <input type="number" class="form-control" id="totalItems" min="1" placeholder="10">
-                                            <small class="builder-muted d-block mt-1">Informational only. You can add more questions below.</small>
+                                            <small class="builder-muted d-block mt-1">Informational only. You can add more questions.</small>
                                             <div class="error-message" id="itemsError"></div>
                                         </div>
                                         <div>
@@ -1181,7 +1279,6 @@ if (!isset($_SESSION['user_id']) || !in_array(($_SESSION['role'] ?? ''), ['admin
                                 <div class="builder-panel-card">
                                     <div class="builder-panel-heading">
                                         <h5>Add Questions</h5>
-                                        <span class="builder-muted">The original question builder, now styled like the uploaded concept.</span>
                                     </div>
                                     <div class="alert alert-info border-0" >
                                         <i class="fas fa-info-circle me-2"></i>
@@ -1196,7 +1293,7 @@ if (!isset($_SESSION['user_id']) || !in_array(($_SESSION['role'] ?? ''), ['admin
                                 <div class="builder-footer-nav">
                                     <button class="builder-footer-btn" onclick="prevStep(1)"><i class="fas fa-arrow-left me-2"></i>Back</button>
                                     <div class="builder-footer-center">
-                                        <button class="builder-footer-btn" onclick="renderQuestionNavigator()"><i class="fas fa-rotate me-2"></i>Refresh List</button>
+                                        <!--<button class="builder-footer-btn" onclick="renderQuestionNavigator()"><i class="fas fa-rotate me-2"></i>Refresh List</button>-->
                                         <button class="builder-footer-btn primary" onclick="nextStep(3)">Review Exam <i class="fas fa-arrow-right ms-2"></i></button>
                                     </div>
                                 </div>
@@ -1257,31 +1354,80 @@ if (!isset($_SESSION['user_id']) || !in_array(($_SESSION['role'] ?? ''), ['admin
                             </div>
                             <div class="builder-right-group">
                                 <div class="builder-section-title">Quick Info</div>
+                            
+                                <div class="builder-right-tip quick-info-card">
+                                    <div class="builder-tip-header">
+                                        <i class="fas fa-lightbulb"></i>
+                                        <strong>Builder Tips</strong>
+                                    </div>
+                            
+                                    <p class="builder-tip-text">
+                                        Use the left sidebar to quickly jump between questions while building your exam.
+                                    </p>
+                            
+                                    <div class="builder-tip-item">
+                                        <span class="builder-tip-label">Keep Questions Clear</span>
+                                        <small>Write short, direct, and easy-to-understand questions.</small>
+                                    </div>
+                            
+                                    <div class="builder-tip-item">
+                                        <span class="builder-tip-label">Review Correct Answers</span>
+                                        <small>Double-check that the correct answer is selected before saving.</small>
+                                    </div>
+                            
+                                    <div class="builder-tip-item">
+                                        <span class="builder-tip-label">Use Preview Step</span>
+                                        <small>Go to the review section before creating the exam to catch missing questions or incorrect choices.</small>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="builder-right-group">
                                 <div class="builder-right-tip">
-                                    <strong class="d-block mb-2">Tip</strong>
-                                    This version keeps your original controls and question components, but the modal layout is reworked to visually follow the uploaded reference.
+                                    <div class="builder-tip-header">
+                                        <i class="fas fa-exclamation-circle"></i>
+                                        <strong>Exam Naming Convention</strong>
+                                    </div>
+                            
+                                    <p class="builder-tip-text">
+                                        Please follow the required naming format to keep exams properly categorized and to avoid progression or reporting issues.
+                                    </p>
+                            
+                                    <div class="builder-tip-item">
+                                        <span class="builder-tip-label">POST-TEST</span>
+                                        <small>[Branch/Category] - POST-TEST (Module [Letter])</small>
+                                        <small class="builder-tip-example">Example: Organic Chemistry - POST-TEST (Module A)</small>
+                                    </div>
+                            
+                                    <div class="builder-tip-item">
+                                        <span class="builder-tip-label">Practice Test</span>
+                                        <small>[Branch/Category] - Practice Test [Number]</small>
+                                        <small class="builder-tip-example">Example: Organic Chemistry - Practice Test 1</small>
+                                    </div>
+                            
+                                    <div class="builder-tip-item">
+                                        <span class="builder-tip-label">Mock Exam</span>
+                                        <small>[Branch/Category] - FULL MOCK EXAM</small>
+                                        <small class="builder-tip-example">Example: Organic Chemistry - FULL MOCK EXAM</small>
+                                    </div>
+                            
+                                    <div class="builder-tip-warning">
+                                        <i class="fas fa-exclamation-circle"> </i>
+                                        Incorrect naming may cause categorization issues, progression errors, and inconsistent dashboard data.
+                                    </div>
                                 </div>
                             </div>
                         </aside>
                     </div>
                 </div>
             </div>
+        
+                </div>
+            </section>
         </div>
     </div>
 
     <div aria-live="polite" aria-atomic="true" class="position-fixed top-0 end-0 p-3" style="z-index: 1100;"><div id="toastContainer"></div></div>
-
-    <div class="modal fade" id="viewExamModal" tabindex="-1" data-bs-backdrop="static" data-bs-keyboard="false">
-        <div class="modal-dialog modal-xl">
-            <div class="modal-content">
-                <div class="modal-header"><h5 class="modal-title"><i class="fas fa-eye"></i> Exam Details</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
-                <div class="modal-body"><div id="viewExamContent"><div class="text-center"><div class="spinner-border" role="status"><span class="visually-hidden">Loading...</span></div></div></div></div>
-                <div class="modal-footer"><button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button></div>
-            </div>
-        </div>
-    </div>
-
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.0/js/bootstrap.bundle.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.0/js/bootstrap.bundle.min.js"></script>
     <script>
         document.querySelector('.collapse-btn').addEventListener('click', function() {
             document.querySelector('.sidebar').classList.toggle('collapsed');
@@ -1824,53 +1970,91 @@ if (!isset($_SESSION['user_id']) || !in_array(($_SESSION['role'] ?? ''), ['admin
             btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span> Saving...';
             topBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span> Saving...';
             btn.disabled = true; topBtn.disabled = true;
-            fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) })
-                .then(r => r.json())
-                .then(res => {
-                    if (res.success) {
-                        bootstrap.Modal.getInstance(document.getElementById('addExamModal')).hide();
-                        resetForm();
-                        loadExams();
-                        showToast('Exam saved successfully!', 'success');
-                    } else {
-                        let message = res.msg || 'Something went wrong while saving the exam.';
-                
-                        if (message.toLowerCase().includes('invalid')) {
-                            message = 'Some questions or data are incomplete. Please review your inputs.';
-                        }
-                
-                        showToast(message, 'warning');
-                        showStep(2);
-                    }
-                })
-                .catch(err => {
-                    console.error('Save error:', err);
-                    showToast(
-                        'Unable to save exam. Please check your inputs and try again.',
-                        'danger'
-                    );
-                
-                    showStep(2);
-                })
-                .finally(() => {
-                    btn.innerHTML = originalText;
-                    topBtn.innerHTML = originalTop;
-                    btn.disabled = false;
-                    topBtn.disabled = false;
-                });
+            fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload)
+})
+.then(async r => {
+    const data = await r.json();
+    if (!r.ok) {
+        throw new Error(data.msg || 'Request failed');
+    }
+    return data;
+})
+.then(res => {
+    console.log(res);
+
+    if (res.success) {
+        showToast(
+            'Exam saved successfully!',
+            'success'
+        );
+
+        resetForm();
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+    } else {
+        // 🔥 Custom meaningful message
+        let message = res.msg || 'Something went wrong while saving the exam.';
+
+        if (message.toLowerCase().includes('invalid')) {
+            message = 'Some questions or data are incomplete. Please review your inputs.';
+        }
+
+        showToast(message, 'warning'); // 🔥 use warning instead of alert
+        showStep(2);
+    }
+})
+.catch(err => {
+    console.error('Save error:', err);
+
+    showToast(
+        'Unable to save exam. Please check your inputs and try again.',
+        'danger'
+    );
+
+    showStep(2);
+})
+// .then(res => {
+//     console.log(res);
+
+//     if (res.success) {
+//         showToast(
+//             'Exam saved successfully!',
+//             'success'
+//         );
+
+//         resetForm();
+//         window.scrollTo({ top: 0, behavior: 'smooth' });
+//     } else {
+//         alert('Error: ' + (res.msg || 'Failed to save exam'));
+//         showStep(2);
+//     }
+// })
+// .catch(err => {
+//     console.error('Save error:', err);
+//     alert(err.message || 'Error saving exam. Please try again.');
+//     showStep(2);
+// })
+.finally(() => {
+    btn.innerHTML = originalText;
+    topBtn.innerHTML = originalTop;
+    btn.disabled = false;
+    topBtn.disabled = false;
+});
         }
 
         function resetForm() {
             questions = [];
             currentExamId = 0;
             isEditMode = false;
-            document.getElementById('addExamModal').querySelectorAll('input, textarea, select').forEach(el => {
+            document.getElementById('examBuilderPage').querySelectorAll('input, textarea, select').forEach(el => {
                 if (el.type === 'checkbox' || el.type === 'radio') el.checked = false;
                 else el.value = '';
             });
             document.getElementById('questionsContainer').innerHTML = '';
             document.querySelectorAll('.error-message').forEach(el => el.style.display = 'none');
-            document.getElementById('modalTitle').textContent = 'Create New Exam';
+            // document.getElementById('modalTitle').textContent = 'Create New Exam';
             document.getElementById('builderModeText').textContent = 'Create';
             document.getElementById('builderMainHeading').textContent = 'Create Exam';
             document.getElementById('builderMainSubheading').textContent = 'Fill in your exam details, add questions, and review before saving.';
@@ -1933,9 +2117,7 @@ if (!isset($_SESSION['user_id']) || !in_array(($_SESSION['role'] ?? ''), ['admin
 
         function viewExam(id) {
             currentExamId = id;
-            const modal = new bootstrap.Modal(document.getElementById('viewExamModal'));
-            modal.show();
-            fetch(`../partial/exam_get.php?id=${id}`)
+                        fetch(`../partial/exam_get.php?id=${id}`)
                 .then(r => r.json())
                 .then(data => {
                     if (data.success) {
@@ -1972,7 +2154,7 @@ if (!isset($_SESSION['user_id']) || !in_array(($_SESSION['role'] ?? ''), ['admin
         function editExam(id) {
             currentExamId = id;
             isEditMode = true;
-            document.getElementById('modalTitle').textContent = 'Edit Exam';
+            // document.getElementById('modalTitle').textContent = 'Edit Exam';
             document.getElementById('builderModeText').textContent = 'Edit';
             document.getElementById('builderMainHeading').textContent = 'Edit Exam';
             document.getElementById('builderMainSubheading').textContent = 'Update exam details and question content before saving.';
@@ -2044,9 +2226,7 @@ if (!isset($_SESSION['user_id']) || !in_array(($_SESSION['role'] ?? ''), ['admin
                             }, 50);
                         });
                     }
-                    const modal = new bootstrap.Modal(document.getElementById('addExamModal'));
-                    modal.show();
-                    showStep(1);
+                                        showStep(1);
                     updateBuilderMeta();
                 })
                 .catch(err => { console.error(err); alert('Failed to load exam'); });
@@ -2087,12 +2267,10 @@ if (!isset($_SESSION['user_id']) || !in_array(($_SESSION['role'] ?? ''), ['admin
             if (totalItemsInput) totalItemsInput.addEventListener('input', updateBuilderMeta);
             const collapseBtn = document.querySelector('.collapse-btn');
             if (collapseBtn) collapseBtn.addEventListener('click', toggleSidebar);
-            loadExams();
-            renderQuestionNavigator();
+                renderQuestionNavigator();
             updateBuilderMeta();
         });
 
-        document.getElementById('addExamModal').addEventListener('hidden.bs.modal', function() { resetForm(); });
 
         setInterval(() => {
             if (currentStep > 1 && questions.length > 0) {

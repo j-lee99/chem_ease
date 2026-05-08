@@ -15,7 +15,7 @@ $dur   = (int)($data['duration_minutes'] ?? 0);
 $pass  = (int)($data['passing_score'] ?? 0);
 $questions = $data['questions'] ?? [];
 
-if(!$title || !$cat || !$diff || $ques<1 || $dur<1 || $pass<0 || count($questions)!=$ques){
+if(!$title || !$cat || !$diff || $ques<1 || $dur<1 || $pass<0 || count($questions) < $ques ){
     echo json_encode(['success'=>false,'msg'=>'Invalid data']);
     exit;
 }

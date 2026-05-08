@@ -1,3 +1,44 @@
+<?php
+    session_start();
+    require_once '../partial/db_conn.php';
+    
+    if (!isset($_SESSION['user_id'])) {
+        header('Location: ../signin.php');
+        exit;
+    }
+    
+    $user_id = $_SESSION['user_id'];
+    
+    $stmt = $conn->prepare("
+        SELECT full_name, profile_image
+        FROM users
+        WHERE id = ? AND is_deleted = 0
+    ");
+    $stmt->bind_param("i", $user_id);
+    $stmt->execute();
+    $user = $stmt->get_result()->fetch_assoc();
+    $stmt->close();
+    
+    $full_name = $user['full_name'] ?? 'Admin';
+    $profile_image = $user['profile_image'] ?? '';
+    
+    $initials = '';
+    $name_parts = explode(' ', trim($full_name));
+    
+    foreach ($name_parts as $part) {
+        if (!empty($part)) {
+            $initials .= strtoupper(substr($part, 0, 1));
+        }
+    
+        if (strlen($initials) >= 2) {
+            break;
+        }
+    }
+    
+    if (empty($initials)) {
+        $initials = 'A';
+    }
+?>
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -67,6 +108,64 @@
         
         .sidebar-nav {
             padding: 0;
+        }
+        
+        .profile-dropdown {
+            position: relative;
+        }
+
+        .profile-trigger {
+            width: 42px;
+            height: 42px;
+            border-radius: 50%;
+            overflow: hidden;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border: 2px solid rgba(255,255,255,0.3);
+            background: rgba(255,255,255,0.1);
+            transition: all 0.2s ease;
+        }
+        
+        .profile-trigger:hover {
+            background: rgba(255,255,255,0.15);
+            border-color: rgba(255,255,255,0.5);
+        }
+        
+        .profile-img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+        
+        .profile-initials {
+            width: 100%;
+            height: 100%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: #ffffff;
+            color: #17a2b8;
+            font-weight: 700;
+            font-size: 14px;
+        }
+        
+        .dropdown-menu {
+            min-width: 220px;
+            border: none;
+            border-radius: 12px;
+            box-shadow: 0 8px 25px rgba(0,0,0,0.15);
+            padding: 0.5rem 0;
+        }
+        
+        .dropdown-item {
+            padding: 10px 16px;
+            font-size: 14px;
+        }
+        
+        .dropdown-item i {
+            width: 18px;
         }
         
         .nav-item {
@@ -302,14 +401,55 @@
     </div>
 
     <!-- Top Navigation -->
-    <div class="top-navbar">
-        <h4>ADMIN PANEL</h4>
-        <div class="navbar-actions">
- 
-            <a href="#" class="logout-btn">
-                <i class="fas fa-sign-out-alt"></i>
-                LOGOUT
-            </a>
+   <div class="navbar-actions">
+        <div class="dropdown profile-dropdown">
+            <div
+                class="profile-trigger"
+                id="adminProfileDropdown"
+                data-bs-toggle="dropdown"
+                aria-expanded="false"
+                role="button"
+            >
+                <?php if ($profile_image && file_exists('../' . $profile_image)): ?>
+                    <img
+                        src="../<?php echo htmlspecialchars($profile_image); ?>?t=<?php echo time(); ?>"
+                        alt="Profile"
+                        class="profile-img"
+                    >
+                <?php else: ?>
+                    <div class="profile-initials">
+                        <?php echo htmlspecialchars($initials); ?>
+                    </div>
+                <?php endif; ?>
+            </div>
+    
+            <ul class="dropdown-menu dropdown-menu-end" aria-labelledby="adminProfileDropdown">
+                <li class="dropdown-header px-3 py-2">
+                    <strong><?php echo htmlspecialchars($full_name); ?></strong>
+                </li>
+    
+                <li><hr class="dropdown-divider"></li>
+    
+                <li>
+                    <a class="dropdown-item" href="Profile_Settings.php">
+                        <i class="fas fa-user-cog me-2"></i> Profile Settings
+                    </a>
+                </li>
+    
+                <li>
+                    <a class="dropdown-item" href="Settings.php">
+                        <i class="fas fa-cog me-2"></i> Settings
+                    </a>
+                </li>
+    
+                <li><hr class="dropdown-divider"></li>
+    
+                <li>
+                    <a class="dropdown-item text-danger" href="../partial/logout.php">
+                        <i class="fas fa-sign-out-alt me-2"></i> Logout
+                    </a>
+                </li>
+            </ul>
         </div>
     </div>
 

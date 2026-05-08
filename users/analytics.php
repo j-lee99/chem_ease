@@ -217,7 +217,6 @@
         }
 }
 </style>
-
 <div class="analytics-container">
     <div class="page-header">
         <h1 class="page-title">Performance Analytics</h1>
@@ -329,7 +328,7 @@ function renderHistory() {
         <tr>
             <td><strong>${h.title}</strong></td>
             <td><span class="badge bg-secondary">${h.category}</span></td>
-            <td><span class="badge bg-${badge}">${h.score}%</span></td>
+            <td><span class="badge bg-${badge}">${h.score ?? 0}%</span></td>
             <td>${h.date}</td>
             <td>${h.time_taken}</td>
         </tr>`;

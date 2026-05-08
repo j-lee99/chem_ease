@@ -5,6 +5,40 @@ require_once '../partial/db_conn.php';
 $role = $_SESSION['role'] ?? '';
 $isAdmin = ($role === 'admin');
 $isSuperAdmin = ($role === 'super_admin');
+
+$user_id = $_SESSION['user_id'];
+
+$stmt = $conn->prepare("
+    SELECT full_name, profile_image
+    FROM users
+    WHERE id = ? AND is_deleted = 0
+");
+$stmt->bind_param("i", $user_id);
+$stmt->execute();
+$user = $stmt->get_result()->fetch_assoc();
+$stmt->close();
+
+$full_name = $user['full_name'] ?? 'Admin';
+$profile_image = $user['profile_image'] ?? '';
+
+$initials = '';
+$name_parts = explode(' ', trim($full_name));
+
+foreach ($name_parts as $part) {
+    if (!empty($part)) {
+        $initials .= strtoupper(substr($part, 0, 1));
+    }
+
+    if (strlen($initials) >= 2) {
+        break;
+    }
+}
+
+if (empty($initials)) {
+    $initials = 'A';
+}
+
+
 if (!isset($_SESSION['user_id']) || !in_array(($_SESSION['role'] ?? ''), ['admin', 'super_admin'], true)) {
     header("Location: ../index.php");
     exit();
@@ -20,12 +54,10 @@ if (!isset($_SESSION['user_id']) || !in_array(($_SESSION['role'] ?? ''), ['admin
     <link href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.0/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
     <link rel="stylesheet" href="learning_material.css">
-    <!-- Favicon -->
     <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png">
     <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
     <link rel="icon" type="image/png" sizes="96x96" href="/favicon-96x96.png">
     <link rel="shortcut icon" href="/favicon.ico">
-    <!-- Apple Touch Icons -->
     <link rel="apple-touch-icon" sizes="57x57" href="/apple-icon-57x57.png">
     <link rel="apple-touch-icon" sizes="60x60" href="/apple-icon-60x60.png">
     <link rel="apple-touch-icon" sizes="72x72" href="/apple-icon-72x72.png">
@@ -37,14 +69,12 @@ if (!isset($_SESSION['user_id']) || !in_array(($_SESSION['role'] ?? ''), ['admin
     <link rel="apple-touch-icon" sizes="180x180" href="/apple-icon-180x180.png">
     <link rel="apple-touch-icon" href="/apple-icon.png">
     <link rel="apple-touch-icon-precomposed" href="/apple-icon-precomposed.png">
-    <!-- Android Icons -->
     <link rel="icon" type="image/png" sizes="36x36" href="/android-icon-36x36.png">
     <link rel="icon" type="image/png" sizes="48x48" href="/android-icon-48x48.png">
     <link rel="icon" type="image/png" sizes="72x72" href="/android-icon-72x72.png">
     <link rel="icon" type="image/png" sizes="96x96" href="/android-icon-96x96.png">
     <link rel="icon" type="image/png" sizes="144x144" href="/android-icon-144x144.png">
     <link rel="icon" type="image/png" sizes="192x192" href="/android-icon-192x192.png">
-    <!-- Microsoft Tiles -->
     <meta name="msapplication-TileColor" content="#0d6efd">
     <meta name="msapplication-TileImage" content="/ms-icon-144x144.png">
     <meta name="msapplication-square70x70logo" content="/ms-icon-70x70.png">
@@ -62,38 +92,141 @@ if (!isset($_SESSION['user_id']) || !in_array(($_SESSION['role'] ?? ''), ['admin
             --dark: #343a40;
         }
 
-        .category-section {
+       .category-section {
             grid-column: 1 / -1;
-            margin-bottom: 16px;
+            margin-bottom: 10px;
         }
-
-        /* Folder header */
+        
         .category-header {
             background: #ffffff;
-            padding: 10px 14px;
-            border-radius: 10px;
+            padding: 12px 18px;
+            border-radius: 14px;
             cursor: pointer;
             border: 1px solid #e5e7eb;
-            margin-bottom: 12px;
+            margin-bottom: 0;
+            min-height: 58px;
+            display: flex;
+            align-items: center;
+            transition: all 0.2s ease;
+            box-shadow: 0 2px 8px rgba(15, 23, 42, 0.04);
         }
-
+        
         .category-header:hover {
             background: #f8fafc;
+            border-color: #dbeafe;
+            box-shadow: 0 6px 16px rgba(15, 23, 42, 0.06);
         }
-
+        
+        .category-header .fw-semibold {
+            font-size: 0.98rem;
+            line-height: 1.2;
+            color: #1f2937;
+            margin-bottom: 2px;
+        }
+        
+        .category-header small {
+            font-size: 0.82rem;
+            line-height: 1.1;
+        }
+        
+        .category-header .badge {
+            font-size: 0.75rem;
+            font-weight: 600;
+            padding: 0.38rem 0.62rem;
+            border-radius: 999px;
+        }
+        
+        .category-icon-wrap {
+            width: 38px;
+            height: 38px;
+            min-width: 38px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 999px;
+            background: #fff7d6;
+        }
+        
+        .category-content {
+            background: #ffffff;
+            border: 1px solid #eef2f7;
+            border-top: none;
+            border-radius: 0 0 14px 14px;
+            padding: 14px;
+            margin-top: -2px;
+            margin-bottom: 0;
+            box-shadow: 0 4px 12px rgba(15, 23, 42, 0.03);
+        }
+        
+        .category-content.d-none {
+            display: none !important;
+        }
+        
         .category-grid {
             display: grid;
             grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
-            gap: 18px;
+            gap: 16px;
         }
-
-        /* Chevron rotate animation */
+        
         .rotate {
             transform: rotate(180deg);
-            transition: .25s ease;
+            transition: transform 0.2s ease;
         }
 
+        .rotate {
+            transform: rotate(180deg);
+            transition: transform 0.25s ease;
+        }
+        
+        .materials-grid {
+            display: grid;
+            gap: 12px;
+        }
 
+        .material-card {
+            border-radius: 18px;
+            overflow: hidden;
+            background: #fff;
+            border: 1px solid #e9ecef;
+            box-shadow: 0 6px 18px rgba(15, 23, 42, 0.06);
+            transition: all 0.25s ease;
+            min-height: 240px;
+        }
+
+        .material-card:hover {
+            transform: translateY(-4px);
+            box-shadow: 0 14px 30px rgba(15, 23, 42, 0.12);
+        }
+
+        .material-thumbnail {
+            height: 120px;
+        }
+
+        .material-content {
+            padding: 16px 16px 18px;
+        }
+
+        .material-title {
+            font-size: 1rem;
+            line-height: 1.45;
+            margin-bottom: 10px;
+            min-height: 48px;
+        }
+
+        .material-type {
+            margin-bottom: 10px;
+            font-size: 0.92rem;
+            color: #6c757d;
+        }
+
+        .material-category {
+            display: inline-flex;
+            align-items: center;
+            padding: 0.38rem 0.7rem;
+            border-radius: 999px;
+            font-size: 0.78rem;
+            font-weight: 600;
+        }
 
         .file-list {
             margin: 1rem 0;
@@ -170,7 +303,6 @@ if (!isset($_SESSION['user_id']) || !in_array(($_SESSION['role'] ?? ''), ['admin
             color: #c82333;
         }
 
-        /* Pagination */
         .pagination-container {
             display: flex;
             justify-content: center;
@@ -219,7 +351,6 @@ if (!isset($_SESSION['user_id']) || !in_array(($_SESSION['role'] ?? ''), ['admin
             padding: 0.4rem 0.8rem;
         }
 
-        /* ── Upload Preview Styles ─────────────────────────────────────── */
         .upload-preview-container {
             margin-top: 1rem;
             padding: 1rem;
@@ -303,11 +434,69 @@ if (!isset($_SESSION['user_id']) || !in_array(($_SESSION['role'] ?? ''), ['admin
             border-radius: 6px;
             margin-bottom: 0.4rem;
         }
+        
+        .profile-dropdown {
+    position: relative;
+}
+
+.profile-trigger {
+    width: 42px;
+    height: 42px;
+    border-radius: 50%;
+    overflow: hidden;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: 2px solid rgba(255,255,255,0.35);
+    background: rgba(255,255,255,0.1);
+    transition: all 0.2s ease;
+}
+
+.profile-trigger:hover {
+    background: rgba(255,255,255,0.15);
+    border-color: rgba(255,255,255,0.6);
+}
+
+.profile-img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+.profile-initials {
+    width: 100%;
+    height: 100%;
+    background: #ffffff;
+    color: var(--primary);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 700;
+    font-size: 14px;
+}
+
+.dropdown-menu {
+    min-width: 230px;
+    border: none;
+    border-radius: 12px;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.15);
+    overflow: hidden;
+}
+
+.dropdown-item {
+    padding: 10px 16px;
+    font-size: 14px;
+}
+
+.dropdown-item i {
+    width: 18px;
+}
+        
     </style>
 </head>
 
 <body>
-    <!-- Sidebar -->
     <div class="sidebar">
         <div class="brand">
             <img src="../images/logo.png" alt="ChemEase Logo">
@@ -323,7 +512,7 @@ if (!isset($_SESSION['user_id']) || !in_array(($_SESSION['role'] ?? ''), ['admin
                 <div class="nav-item"><a href="Learning_Material.php" class="nav-link active"><i class="fas fa-book"></i><span>Learning Materials</span></a></div>
                 <div class="nav-item"><a href="Practice_Exams.php" class="nav-link"><i class="fas fa-clipboard-list"></i><span>Practice Exams</span></a></div>
             <?php endif; ?>
-              <?php if ($isSuperAdmin || $isAdmin): ?>
+            <?php if ($isSuperAdmin || $isAdmin): ?>
                 <div class="nav-item">
                     <a href="Discussion_Forums.php" class="nav-link">
                         <i class="fas fa-comments"></i>
@@ -332,20 +521,76 @@ if (!isset($_SESSION['user_id']) || !in_array(($_SESSION['role'] ?? ''), ['admin
                 </div>
             <?php endif; ?>
             <?php if ($isSuperAdmin): ?>
-                <div class="nav-item"><a href="Generate_Reports.php" class="nav-link"><i class="fas fa-file-lines"></i><span>Generate Reports</span></a></div>
+                <div class="nav-item"><a href="Generate_Reports.php" class="nav-link"><i class="fas fa-file-lines"></i><span>Reports & Analytics</span></a></div>
             <?php endif; ?>
         </nav>
     </div>
 
-    <!-- Top Navbar -->
     <div class="top-navbar">
         <h4>ADMIN PANEL</h4>
         <div class="navbar-actions">
-            <a href="https://chemease.site/" class="logout-btn"><i class="fas fa-sign-out-alt"></i> LOGOUT</a>
+    <div class="dropdown profile-dropdown">
+        <div
+            class="profile-trigger"
+            id="adminProfileDropdown"
+            data-bs-toggle="dropdown"
+            aria-expanded="false"
+        >
+            <?php if ($profile_image && file_exists('../' . $profile_image)): ?>
+                <img
+                    src="../<?php echo htmlspecialchars($profile_image); ?>?t=<?php echo time(); ?>"
+                    alt="Profile"
+                    class="profile-img"
+                >
+            <?php else: ?>
+                <div class="profile-initials">
+                    <?php echo htmlspecialchars($initials); ?>
+                </div>
+            <?php endif; ?>
         </div>
+
+        <ul class="dropdown-menu dropdown-menu-end" aria-labelledby="adminProfileDropdown">
+            <li class="dropdown-header px-3 py-2">
+                <strong><?php echo htmlspecialchars($full_name); ?></strong><br>
+                <small class="text-muted">
+                    <?php echo $isSuperAdmin ? 'Super Admin' : 'Admin'; ?>
+                </small>
+            </li>
+
+            <li><hr class="dropdown-divider"></li>
+
+            <li>
+                <a class="dropdown-item" href="Profile_Settings.php">
+                    <i class="fas fa-user-cog me-2"></i> Profile Settings
+                </a>
+            </li>
+
+            <?php if ($isSuperAdmin): ?>
+                <li>
+                    <a class="dropdown-item" href="Settings.php">
+                        <i class="fas fa-cog me-2"></i> System Settings
+                    </a>
+                </li>
+            <?php endif; ?>
+
+            <!--<li>-->
+            <!--    <a class="dropdown-item" href="index.php">-->
+            <!--        <i class="fas fa-home me-2"></i> Dashboard-->
+            <!--    </a>-->
+            <!--</li>-->
+
+            <li><hr class="dropdown-divider"></li>
+
+            <li>
+                <a class="dropdown-item text-danger" href="../partial/logout.php">
+                    <i class="fas fa-sign-out-alt me-2"></i> Logout
+                </a>
+            </li>
+        </ul>
+    </div>
+</div>
     </div>
 
-    <!-- Main Content -->
     <div class="main-content">
         <div class="materials-container">
             <div class="materials-header">
@@ -391,7 +636,6 @@ if (!isset($_SESSION['user_id']) || !in_array(($_SESSION['role'] ?? ''), ['admin
                 </div>
             </div>
 
-            <!-- Pagination -->
             <div class="pagination-container" id="paginationContainer" style="display:none;">
                 <button class="btn load-more-btn" id="loadMoreBtn">Load More</button>
                 <div id="pageNumbers" class="d-flex gap-2"></div>
@@ -399,7 +643,6 @@ if (!isset($_SESSION['user_id']) || !in_array(($_SESSION['role'] ?? ''), ['admin
         </div>
     </div>
 
-    <!-- Modal with Clickable PDF Preview -->
     <div class="modal fade" id="addModal" tabindex="-1" data-bs-backdrop="static" data-bs-keyboard="false">
         <div class="modal-dialog modal-lg">
             <div class="modal-content">
@@ -434,7 +677,6 @@ if (!isset($_SESSION['user_id']) || !in_array(($_SESSION['role'] ?? ''), ['admin
                         <div class="mb-3">
                             <input type="file" name="pdfs[]" accept=".pdf" class="form-control" multiple id="pdfInput">
                         </div>
-                        <!-- PDF Preview Area -->
                         <div id="pdfPreview" class="upload-preview-container" style="display:none;"></div>
 
                         <h6>YouTube Videos (one per line)</h6>
@@ -442,7 +684,6 @@ if (!isset($_SESSION['user_id']) || !in_array(($_SESSION['role'] ?? ''), ['admin
                             <textarea name="youtube_urls" class="form-control" rows="5" placeholder="https://www.youtube.com/watch?v=xxxx&#10;https://youtu.be/yyyy" id="youtubeInput"></textarea>
                             <small class="text-muted">Paste full YouTube URLs (one per line).</small>
                         </div>
-                        <!-- YouTube Preview Area -->
                         <div id="youtubePreview" class="youtube-preview-list" style="display:none;"></div>
                     </div>
                     <div class="modal-footer">
@@ -464,6 +705,8 @@ if (!isset($_SESSION['user_id']) || !in_array(($_SESSION['role'] ?? ''), ['admin
                 i.classList.toggle('fa-chevron-right');
             }
 
+            window.toggleSidebar = toggleSidebar;
+
             let currentPage = 1;
             let currentSearch = '';
             let totalPages = 1;
@@ -472,56 +715,81 @@ if (!isset($_SESSION['user_id']) || !in_array(($_SESSION['role'] ?? ''), ['admin
             async function loadMaterials(page = 1, append = false) {
                 if (isLoading) return;
                 isLoading = true;
+
                 const grid = document.getElementById('materialsGrid');
                 if (!grid) {
                     isLoading = false;
                     return;
                 }
+
                 if (!append) {
                     grid.innerHTML = '<div class="text-center py-5"><div class="spinner-border text-primary"></div><p class="mt-3 text-muted">Loading...</p></div>';
                 }
+
                 try {
-                    // const url = `../partial/get_materials_paginated.php?page=${page}&search=${encodeURIComponent(currentSearch)}`;
                     const url = `../partial/get_materials_paginated.php?all=1&search=${encodeURIComponent(currentSearch)}`;
                     const resp = await fetch(url);
+
                     if (!resp.ok) {
                         const text = await resp.text().catch(() => '');
                         throw new Error(`HTTP ${resp.status} ${resp.statusText} ${text ? '- ' + text.slice(0, 200) : ''}`);
                     }
+
                     const data = await resp.json();
+
                     if (!append) grid.innerHTML = '';
+
                     if (!data.folders || Object.keys(data.folders).length === 0) {
                         grid.innerHTML = '<div class="text-center py-5"><p class="text-muted fs-5">No materials found.</p></div>';
                     } else {
                         renderFolders(data.folders || {});
                     }
+
                     totalPages = data.total_pages || 1;
                     currentPage = data.current_page || 1;
+
                     const pagContainer = document.getElementById('paginationContainer');
                     const loadMoreBtn = document.getElementById('loadMoreBtn');
                     const pageNumbers = document.getElementById('pageNumbers');
+
                     if (pagContainer) {
-                        pagContainer.style.display = data.total_items > 0 ? 'flex' : 'none';
+                        pagContainer.style.display = (data.total_items > 0 && totalPages > 1) ? 'flex' : 'none';
                     }
+
                     if (loadMoreBtn) {
-                        loadMoreBtn.style.display = data.has_more ? 'block' : 'none';
+                        loadMoreBtn.style.display = data.has_more && totalPages > 1 ? 'block' : 'none';
                     }
+
                     if (pageNumbers) {
                         pageNumbers.innerHTML = '';
-                        const maxVisible = 5;
-                        let start = Math.max(1, currentPage - 2);
-                        let end = Math.min(totalPages, start + maxVisible - 1);
-                        if (end - start + 1 < maxVisible) start = Math.max(1, end - maxVisible + 1);
-                        if (start > 1) {
-                            pageNumbers.innerHTML += `<button class="btn pagination-btn" onclick="goToPage(1)">1</button><span>...</span>`;
-                        }
-                        for (let i = start; i <= end; i++) {
-                            pageNumbers.innerHTML += `<button class="btn pagination-btn ${i === currentPage ? 'active' : ''}" onclick="goToPage(${i})">${i}</button>`;
-                        }
-                        if (end < totalPages) {
-                            pageNumbers.innerHTML += `<span>...</span><button class="btn pagination-btn" onclick="goToPage(${totalPages})">${totalPages}</button>`;
+
+                        if (totalPages > 1) {
+                            const maxVisible = 5;
+                            let start = Math.max(1, currentPage - 2);
+                            let end = Math.min(totalPages, start + maxVisible - 1);
+
+                            if (end - start + 1 < maxVisible) {
+                                start = Math.max(1, end - maxVisible + 1);
+                            }
+
+                            if (start > 1) {
+                                pageNumbers.innerHTML += `<button class="btn pagination-btn" onclick="goToPage(1)">1</button><span>...</span>`;
+                            }
+
+                            for (let i = start; i <= end; i++) {
+                                pageNumbers.innerHTML += `
+                                    <button class="btn pagination-btn ${i === currentPage ? 'active' : ''}" onclick="goToPage(${i})">
+                                        ${i}
+                                    </button>
+                                `;
+                            }
+
+                            if (end < totalPages) {
+                                pageNumbers.innerHTML += `<span>...</span><button class="btn pagination-btn" onclick="goToPage(${totalPages})">${totalPages}</button>`;
+                            }
                         }
                     }
+
                     attachCardEvents();
                 } catch (err) {
                     console.error(err);
@@ -572,27 +840,35 @@ if (!isset($_SESSION['user_id']) || !in_array(($_SESSION['role'] ?? ''), ['admin
                     "BioChemistry"
                 ];
 
-                categoryOrder.forEach(category => {
+                categoryOrder.forEach((category, index) => {
                     const materials = folders?.[category] ?? [];
+                    const isFirst = index === 0;
 
                     const section = document.createElement('div');
                     section.className = 'category-section';
 
                     section.innerHTML = `
-            <div class="category-header d-flex align-items-center" onclick="toggleCategory(this)">
-                <div class="d-flex align-items-center gap-2">
-                    <i class="fas fa-folder text-warning"></i>
-                    <span class="fw-semibold">${category}</span>
-                    <span class="badge bg-secondary">${materials.length}</span>
-                </div>
-                <i class="fas fa-chevron-down ms-auto"></i>
-            </div>
+                        <div class="category-header" onclick="toggleCategory(this)">
+                            <div class="d-flex align-items-center w-100">
+                                <div class="category-icon-wrap">
+                                    <i class="fas fa-folder text-warning"></i>
+                                </div>
 
-            <div class="category-content d-none">
-                <div class="category-grid"></div>
-                ${materials.length === 0 ? `<div class="text-muted small mt-2">No materials in this category.</div>` : ``}
-            </div>
-        `;
+                                <div class="d-flex flex-column">
+                                    <span class="fw-semibold">${category}</span>
+                                    <small class="text-muted">${materials.length} material(s)</small>
+                                </div>
+
+                                <span class="badge bg-secondary ms-auto me-2">${materials.length}</span>
+                                <i class="fas fa-chevron-down ${isFirst ? 'rotate' : ''}"></i>
+                            </div>
+                        </div>
+
+                        <div class="category-content ${isFirst ? '' : 'd-none'}">
+                            <div class="category-grid"></div>
+                            ${materials.length === 0 ? `<div class="text-muted small mt-2">No materials in this category.</div>` : ``}
+                        </div>
+                    `;
 
                     const innerGrid = section.querySelector('.category-grid');
                     materials.forEach(row => {
@@ -605,34 +881,27 @@ if (!isset($_SESSION['user_id']) || !in_array(($_SESSION['role'] ?? ''), ['admin
                 attachCardEvents();
             }
 
-
-
-
-
             window.toggleCategory = function(header) {
                 const content = header.nextElementSibling;
                 content.classList.toggle('d-none');
                 header.querySelector('.fa-chevron-down')?.classList.toggle('rotate');
             };
 
-
-
             function buildMaterialCard(row) {
                 const catClass = row.category.toLowerCase().replace(/ /g, '-');
                 return `
-    <div class="material-card clickable-card" data-id="${row.id}" style="cursor:pointer;">
-      <div class="material-thumbnail ${catClass}">
-        <div class="material-placeholder"><i class="fas fa-book"></i></div>
-      </div>
+                    <div class="material-card clickable-card" data-id="${row.id}" style="cursor:pointer;">
+                        <div class="material-thumbnail ${catClass}">
+                            <div class="material-placeholder"><i class="fas fa-book"></i></div>
+                        </div>
 
-      <div class="material-content">
-        <h3 class="material-title">${row.title}</h3>
-        <div class="material-type"><span>${row.file_count} item(s)</span></div>
-        <span class="material-category ${catClass}">${row.category}</span>
-        
-      </div>
-    </div>
-  `;
+                        <div class="material-content">
+                            <h3 class="material-title">${row.title}</h3>
+                            <div class="material-type"><span>${row.file_count} item(s)</span></div>
+                            <span class="material-category ${catClass}">${row.category}</span>
+                        </div>
+                    </div>
+                `;
             }
 
             const pdfInput = document.getElementById('pdfInput');
@@ -647,6 +916,7 @@ if (!isset($_SESSION['user_id']) || !in_array(($_SESSION['role'] ?? ''), ['admin
                 if (this.files.length === 0) return;
 
                 pdfPreview.style.display = 'block';
+
                 Array.from(this.files).forEach((file, index) => {
                     const item = document.createElement('div');
                     item.className = 'preview-item pdf';
@@ -665,19 +935,23 @@ if (!isset($_SESSION['user_id']) || !in_array(($_SESSION['role'] ?? ''), ['admin
                         if (e.target.closest('.remove-preview-btn')) return;
                         const url = URL.createObjectURL(file);
                         window.open(url, '_blank');
-
                         setTimeout(() => URL.revokeObjectURL(url), 30000);
                     });
 
                     item.querySelector('.remove-preview-btn').onclick = (e) => {
                         e.stopPropagation();
                         const dt = new DataTransfer();
+
                         Array.from(pdfInput.files).forEach((f, i) => {
                             if (i !== index) dt.items.add(f);
                         });
+
                         pdfInput.files = dt.files;
                         item.remove();
-                        if (pdfPreview.children.length === 0) pdfPreview.style.display = 'none';
+
+                        if (pdfPreview.children.length === 0) {
+                            pdfPreview.style.display = 'none';
+                        }
                     };
                 });
             });
@@ -693,6 +967,7 @@ if (!isset($_SESSION['user_id']) || !in_array(($_SESSION['role'] ?? ''), ['admin
                 if (lines.length === 0) return;
 
                 youtubePreview.style.display = 'block';
+
                 lines.forEach((url, index) => {
                     const item = document.createElement('div');
                     item.className = 'youtube-preview-item';
@@ -729,13 +1004,16 @@ if (!isset($_SESSION['user_id']) || !in_array(($_SESSION['role'] ?? ''), ['admin
             document.getElementById('uploadForm')?.addEventListener('submit', async e => {
                 e.preventDefault();
                 const formData = new FormData(e.target);
+
                 try {
                     const resp = await fetch('../partial/upload_material_api.php', {
                         method: 'POST',
                         body: formData
                     });
+
                     const data = await resp.json();
                     alert(data.message || data.error || 'Unknown response');
+
                     if (data.status === 'success') {
                         bootstrap.Modal.getInstance(document.getElementById('addModal')).hide();
                         loadMaterials(1, false);
@@ -745,7 +1023,6 @@ if (!isset($_SESSION['user_id']) || !in_array(($_SESSION['role'] ?? ''), ['admin
                 }
             });
 
-            // Initial load
             loadMaterials(1);
         });
     </script>

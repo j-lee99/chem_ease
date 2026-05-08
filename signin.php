@@ -59,6 +59,33 @@
             align-items: center;
             justify-content: center;
         }
+        
+        .submit-btn-guest {
+            margin-top: 25px;
+            width: 100%;
+            padding: 1rem;
+            background: #ffffff;
+            border: 2px solid var(--primary-blue);
+            border-radius: 12px;
+            color: var(--primary-blue);
+            font-size: 1.1rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            min-height: 52px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        
+        .submit-btn-guest:hover {
+            background: var(--primary-blue);
+            color: #fff;
+            transform: translateY(-2px);
+        }
+        
         .submit-btn:hover {
             background: linear-gradient(135deg, #138496, #0e7490);
             transform: translateY(-3px);
@@ -113,6 +140,154 @@
             background-color: #fff3cd;
             color: #856404;
             border: 1px solid #ffeeba;
+        }
+
+        .auth-divider {
+            display: flex;
+            align-items: center;
+            gap: 0.85rem;
+            margin: 1.35rem 0 1rem;
+            color: #8a98a8;
+            font-size: 0.82rem;
+            font-weight: 700;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+        }
+
+        .auth-divider::before,
+        .auth-divider::after {
+            content: '';
+            flex: 1;
+            height: 1px;
+            background: linear-gradient(90deg, transparent, rgba(23, 162, 184, 0.22), transparent);
+        }
+
+        .guest-preview-box {
+            background: linear-gradient(135deg, rgba(23, 162, 184, 0.08), rgba(255, 255, 255, 0.95));
+            border: 1px solid rgba(23, 162, 184, 0.18);
+            border-radius: 16px;
+            padding: 0.95rem;
+            margin-top: 0.75rem;
+            box-shadow: 0 8px 24px rgba(23, 162, 184, 0.08);
+        }
+
+        .guest-preview-title {
+            display: flex;
+            align-items: center;
+            gap: 0.55rem;
+            color: #0e7490;
+            font-size: 0.94rem;
+            font-weight: 800;
+            margin-bottom: 0.55rem;
+        }
+
+        .guest-preview-list {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 0.4rem 0.75rem;
+            margin: 0;
+            padding: 0;
+            list-style: none;
+            color: #536273;
+            font-size: 0.82rem;
+            line-height: 1.3;
+        }
+
+        .guest-preview-list li {
+            display: flex;
+            align-items: center;
+            gap: 0.38rem;
+            min-width: 0;
+        }
+
+        .guest-preview-list i {
+            color: #17a2b8;
+            font-size: 0.75rem;
+            flex-shrink: 0;
+        }
+
+        .submit-btn-guest {
+            margin-top: 0.85rem;
+            position: relative;
+            isolation: isolate;
+            gap: 0.65rem;
+            background: linear-gradient(135deg, #ffffff, #f3fbfd);
+            border: 2px solid rgba(23, 162, 184, 0.55);
+            box-shadow: 0 8px 22px rgba(23, 162, 184, 0.12);
+            text-transform: none;
+            letter-spacing: 0;
+            overflow: hidden;
+        }
+
+        .submit-btn-guest::before {
+            content: '';
+            position: absolute;
+            inset: 0;
+            background: linear-gradient(135deg, var(--primary-blue), #20c5d4);
+            opacity: 0;
+            z-index: -1;
+            transition: opacity 0.25s ease;
+        }
+
+        .submit-btn-guest:hover::before {
+            opacity: 1;
+        }
+
+        .submit-btn-guest:hover {
+            border-color: transparent;
+            color: #fff;
+            transform: translateY(-3px);
+            box-shadow: 0 14px 32px rgba(23, 162, 184, 0.24);
+        }
+
+        .guest-btn-content {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            line-height: 1.15;
+        }
+
+        .guest-btn-main {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+            font-size: 1rem;
+            font-weight: 800;
+        }
+
+        .guest-btn-sub {
+            margin-top: 0.18rem;
+            font-size: 0.78rem;
+            font-weight: 600;
+            opacity: 0.78;
+        }
+
+        .submit-btn-guest.loading .spinner {
+            border-top-color: var(--primary-blue);
+        }
+
+        .submit-btn-guest.loading {
+            color: var(--primary-blue);
+            transform: none;
+        }
+
+        .submit-btn-guest:disabled {
+            opacity: 0.75;
+            cursor: not-allowed;
+        }
+
+        @media (max-width: 480px) {
+            .guest-preview-list {
+                grid-template-columns: 1fr;
+            }
+
+            .guest-btn-main {
+                font-size: 0.95rem;
+            }
+
+            .guest-btn-sub {
+                font-size: 0.74rem;
+            }
         }
 
         /* Success Checkmark Animation */
@@ -261,6 +436,28 @@
                 <button type="submit" class="submit-btn" id="submitBtn">
                     <span id="btnText">Sign In</span>
                 </button>
+
+                <div class="auth-divider">or explore first</div>
+
+                <div class="guest-preview-box" aria-label="Guest access preview">
+                    <div class="guest-preview-title">
+                        <i class="fas fa-eye"></i>
+                        Try ChemEase without creating an account
+                    </div>
+                    <ul class="guest-preview-list">
+                        <li><i class="fas fa-check-circle"></i>View study materials</li>
+                        <li><i class="fas fa-check-circle"></i>Preview post tests</li>
+                        <li><i class="fas fa-check-circle"></i>Explore tools</li>
+                        <li><i class="fas fa-lock"></i>Downloads require sign in</li>
+                    </ul>
+                </div>
+                
+                <button type="button" class="submit-btn-guest" id="guestBtn">
+                    <span id="guestBtnText" class="guest-btn-content">
+                        <span class="guest-btn-main"><i class="fas fa-user-clock"></i> Continue as Guest</span>
+                        <span class="guest-btn-sub">Your guest progress stays in this browser session</span>
+                    </span>
+                </button>
             </form>
           
             <div class="signup-link">
@@ -313,6 +510,42 @@
                 form.style.opacity = '1';
             }, 400);
         }
+
+        async function syncGuestProgressAfterLogin() {
+            let guestProgress = {};
+            try {
+                guestProgress = JSON.parse(sessionStorage.getItem('guest_progress') || '{}') || {};
+            } catch (e) {
+                guestProgress = {};
+            }
+
+            const entries = Object.entries(guestProgress);
+            if (!entries.length) return;
+
+            const results = await Promise.all(entries.map(async ([fileId, progress]) => {
+                const safeFileId = parseInt(fileId, 10);
+                const safeProgress = Math.max(0, Math.min(100, Math.round(Number(progress) || 0)));
+
+                if (!Number.isFinite(safeFileId) || safeFileId <= 0) return true;
+
+                const response = await fetch('partial/save_progress.php', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                    body: new URLSearchParams({
+                        file_id: String(safeFileId),
+                        progress: String(safeProgress)
+                    })
+                });
+
+                return response.ok;
+            }));
+
+            if (results.every(Boolean)) {
+                sessionStorage.removeItem('guest_progress');
+                sessionStorage.removeItem('guest_selected_module');
+            }
+        }
+
         document.addEventListener('DOMContentLoaded', function() {
             // Floating icons hover effect
             document.querySelectorAll('.floating-icon').forEach(icon => {
@@ -326,6 +559,49 @@
                     this.style.transform = '';
                     this.style.filter = 'drop-shadow(0 0 8px rgba(23, 162, 184, 0.2))';
                 });
+            });
+            
+            function setGuestButtonLoading(isLoading) {
+                const guestBtn = document.getElementById('guestBtn');
+                if (!guestBtn) return;
+
+                guestBtn.classList.toggle('loading', isLoading);
+                guestBtn.disabled = isLoading;
+
+                guestBtn.innerHTML = isLoading
+                    ? '<div class="spinner" aria-label="Loading"></div>'
+                    : `
+                        <span id="guestBtnText" class="guest-btn-content">
+                            <span class="guest-btn-main"><i class="fas fa-user-clock"></i> Continue as Guest</span>
+                            <span class="guest-btn-sub">Your guest progress stays in this browser session</span>
+                        </span>
+                    `;
+            }
+
+            document.getElementById('guestBtn').addEventListener('click', async function () {
+                hideAlert();
+                setGuestButtonLoading(true);
+
+                try {
+                    const response = await fetch('partial/guest_signin.php', {
+                        method: 'POST',
+                        cache: 'no-store'
+                    });
+
+                    const data = await response.json();
+
+                    if (data.status === 'success') {
+                        window.location.href = data.redirect;
+                        return;
+                    }
+
+                    showAlert(data.message || 'Unable to continue as guest.', 'warning');
+                    setGuestButtonLoading(false);
+                } catch (err) {
+                    showAlert('Something went wrong while starting guest mode. Please try again.', 'danger');
+                    setGuestButtonLoading(false);
+                    console.error(err);
+                }
             });
             // Input focus & real-time validation
             document.querySelectorAll('.form-input').forEach(input => {
@@ -396,6 +672,7 @@
                     submitBtn.disabled = false;
                     submitBtn.innerHTML = '<span id="btnText">Sign In</span>';
                     if (data.status === 'success') {
+                        await syncGuestProgressAfterLogin();
                         showSuccessAnimation();
                         setTimeout(() => {
                             window.location.href = data.redirect;

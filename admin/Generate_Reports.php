@@ -11,47 +11,94 @@ if (!isset($_SESSION['user_id']) || (!$isAdmin && !$isSuperAdmin)) {
     exit;
 }
 
-if (!$isSuperAdmin) {
-    $accessDenied = true;
-} else {
-    $accessDenied = false;
+$accessDenied = !$isSuperAdmin;
+
+function fetchScalar(mysqli $conn, string $sql, $default = 0)
+{
+    $res = $conn->query($sql);
+    if (!$res) return $default;
+
+    $row = $res->fetch_row();
+    return $row[0] ?? $default;
+}
+
+function safePercent(int|float $part, int|float $whole, int $precision = 0): float
+{
+    if ((float)$whole <= 0) return 0;
+    return round(((float)$part / (float)$whole) * 100, $precision);
 }
 
 $total_users = 0;
+$new_users_last_30 = 0;
+$active_users_last_30 = 0;
 $total_attempts = 0;
 $avg_score = 0;
+$passed_attempts = 0;
+$pass_rate = 0;
+
 $top_users = [];
 $attempts_last_30 = [];
+$material_engagement = [];
 
 if (!$accessDenied) {
-    // Total users
-    $res = $conn->query("SELECT COUNT(*) AS c FROM users WHERE role='user'");
-    if ($res) {
-        $row = $res->fetch_assoc();
-        $total_users = (int)($row['c'] ?? 0);
-    } else {
-        $res2 = $conn->query("SELECT COUNT(*) AS c FROM users");
-        if ($res2) {
-            $row = $res2->fetch_assoc();
-            $total_users = (int)($row['c'] ?? 0);
-        }
-    }
+    $total_users = (int) fetchScalar(
+        $conn,
+        "SELECT COUNT(*) FROM users WHERE role = 'user'",
+        0
+    );
 
-    // Total attempts
-    $res = $conn->query("SELECT COUNT(*) AS c FROM user_exam_attempts WHERE finished_at IS NOT NULL");
-    if ($res) {
-        $row = $res->fetch_assoc();
-        $total_attempts = (int)($row['c'] ?? 0);
-    }
+    $new_users_last_30 = (int) fetchScalar(
+        $conn,
+        "SELECT COUNT(*)
+         FROM users
+         WHERE role = 'user'
+           AND created_at IS NOT NULL
+           AND created_at >= (NOW() - INTERVAL 30 DAY)",
+        0
+    );
 
-    // Avg score
-    $res = $conn->query("SELECT COALESCE(AVG(score), 0) AS a FROM user_exam_attempts WHERE finished_at IS NOT NULL AND score IS NOT NULL");
-    if ($res) {
-        $row = $res->fetch_assoc();
-        $avg_score = (int)round((float)($row['a'] ?? 0));
-    }
+    $active_users_last_30 = (int) fetchScalar(
+        $conn,
+        "SELECT COUNT(DISTINCT uea.user_id)
+         FROM user_exam_attempts uea
+         INNER JOIN users u ON u.id = uea.user_id
+         WHERE uea.finished_at IS NOT NULL
+           AND uea.finished_at >= (NOW() - INTERVAL 30 DAY)
+           AND u.role = 'user'",
+        0
+    );
 
-    // Attempts last 30 days
+    $total_attempts = (int) fetchScalar(
+        $conn,
+        "SELECT COUNT(*)
+         FROM user_exam_attempts
+         WHERE finished_at IS NOT NULL",
+        0
+    );
+
+    $avg_score = (int) round((float) fetchScalar(
+        $conn,
+        "SELECT COALESCE(AVG(score), 0)
+         FROM user_exam_attempts
+         WHERE finished_at IS NOT NULL
+           AND score IS NOT NULL",
+        0
+    ));
+
+    $passed_attempts = (int) fetchScalar(
+        $conn,
+        "SELECT COUNT(*)
+         FROM user_exam_attempts uea
+         INNER JOIN exams e ON e.id = uea.exam_id
+         WHERE uea.finished_at IS NOT NULL
+           AND uea.score IS NOT NULL
+           AND e.passing_score IS NOT NULL
+           AND uea.score >= e.passing_score",
+        0
+    );
+
+    $pass_rate = safePercent($passed_attempts, $total_attempts, 0);
+
     $res = $conn->query("
         SELECT DATE(finished_at) AS d, COUNT(*) AS c
         FROM user_exam_attempts
@@ -62,16 +109,24 @@ if (!$accessDenied) {
     ");
     if ($res) {
         while ($r = $res->fetch_assoc()) {
-            $attempts_last_30[] = ['date' => $r['d'], 'count' => (int)$r['c']];
+            $attempts_last_30[] = [
+                'date' => $r['d'],
+                'count' => (int) $r['c']
+            ];
         }
     }
 
-    // Top users by avg score
     $res = $conn->query("
-        SELECT u.id, u.full_name, COALESCE(AVG(a.score), 0) AS avg_score, COUNT(*) AS attempts
+        SELECT
+            u.id,
+            u.full_name,
+            COALESCE(AVG(a.score), 0) AS avg_score,
+            COUNT(*) AS attempts
         FROM user_exam_attempts a
-        JOIN users u ON u.id = a.user_id
-        WHERE a.finished_at IS NOT NULL AND a.score IS NOT NULL
+        INNER JOIN users u ON u.id = a.user_id
+        WHERE a.finished_at IS NOT NULL
+          AND a.score IS NOT NULL
+          AND u.role = 'user'
         GROUP BY u.id, u.full_name
         HAVING COUNT(*) >= 1
         ORDER BY avg_score DESC, attempts DESC, u.id ASC
@@ -80,10 +135,45 @@ if (!$accessDenied) {
     if ($res) {
         while ($r = $res->fetch_assoc()) {
             $top_users[] = [
-                'id' => (int)$r['id'],
+                'id' => (int) $r['id'],
                 'name' => $r['full_name'] ?? 'Unknown',
-                'avg_score' => (int)round((float)($r['avg_score'] ?? 0)),
-                'attempts' => (int)($r['attempts'] ?? 0),
+                'avg_score' => (int) round((float) ($r['avg_score'] ?? 0)),
+                'attempts' => (int) ($r['attempts'] ?? 0),
+            ];
+        }
+    }
+
+    // Matches get_progress structure:
+    // study_materials -> study_material_files -> user_progress
+    $res = $conn->query("
+        SELECT
+            m.id,
+            m.title,
+            m.category,
+            m.module,
+            COUNT(DISTINCT f.id) AS total_files,
+            COUNT(DISTINCT p.user_id) AS engaged_users,
+            COALESCE(ROUND(AVG(p.progress)), 0) AS avg_progress
+        FROM study_materials m
+        LEFT JOIN study_material_files f
+            ON f.material_id = m.id
+        LEFT JOIN user_progress p
+            ON p.file_id = f.id
+        GROUP BY m.id, m.title, m.category, m.module
+        HAVING COUNT(DISTINCT p.user_id) > 0
+        ORDER BY engaged_users DESC, avg_progress DESC, m.title ASC
+        LIMIT 10
+    ");
+    if ($res) {
+        while ($r = $res->fetch_assoc()) {
+            $material_engagement[] = [
+                'id' => (int) $r['id'],
+                'title' => $r['title'] ?? 'Untitled Material',
+                'category' => $r['category'] ?? '—',
+                'module' => $r['module'] ?? null,
+                'engaged_users' => (int) ($r['engaged_users'] ?? 0),
+                'total_files' => (int) ($r['total_files'] ?? 0),
+                'avg_progress' => (int) ($r['avg_progress'] ?? 0),
             ];
         }
     }
@@ -91,6 +181,20 @@ if (!$accessDenied) {
 
 $labels = array_map(fn($x) => $x['date'], $attempts_last_30);
 $counts = array_map(fn($x) => $x['count'], $attempts_last_30);
+
+$topUserLabels = array_map(fn($x) => $x['name'], $top_users);
+$topUserScores = array_map(fn($x) => (int) $x['avg_score'], $top_users);
+
+$materialLabels = array_map(fn($x) => $x['title'], $material_engagement);
+$materialUsers = array_map(fn($x) => (int) $x['engaged_users'], $material_engagement);
+
+$inactive_users_last_30 = max(0, $total_users - $active_users_last_30);
+$activeUserLabels = ['Active Users', 'Inactive Users'];
+$activeUserCounts = [$active_users_last_30, $inactive_users_last_30];
+
+$failed_attempts = max(0, $total_attempts - $passed_attempts);
+$passRateLabels = ['Passed', 'Failed'];
+$passRateCounts = [$passed_attempts, $failed_attempts];
 ?>
 
 <!DOCTYPE html>
@@ -102,11 +206,11 @@ $counts = array_map(fn($x) => $x['count'], $attempts_last_30);
     <title>
         <?php
         if ($isSuperAdmin) {
-            echo "ChemEase Super Admin Panel - Generate Reports";
+            echo "ChemEase Super Admin Panel - Reports & Analytics";
         } elseif ($isAdmin) {
-            echo "ChemEase Admin Panel - Generate Reports";
+            echo "ChemEase Admin Panel - Reports & Analytics";
         } else {
-            echo "ChemEase - Generate Reports";
+            echo "ChemEase - Reports & Analytics";
         }
         ?>
     </title>
@@ -336,6 +440,32 @@ $counts = array_map(fn($x) => $x['count'], $attempts_last_30);
             background: #f8f9fa;
         }
 
+        .metric-card .metric-icon {
+            width: 44px;
+            height: 44px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 999px;
+            flex: 0 0 auto;
+        }
+
+        .metric-value {
+            font-size: 28px;
+            line-height: 1;
+            font-weight: 800;
+        }
+
+        .chart-wrap {
+            position: relative;
+            min-height: 300px;
+        }
+
+        .chart-wrap-sm {
+            position: relative;
+            min-height: 260px;
+        }
+
         @media (max-width: 768px) {
             .sidebar {
                 transform: translateX(-100%);
@@ -354,35 +484,17 @@ $counts = array_map(fn($x) => $x['count'], $attempts_last_30);
                 margin-left: 0;
                 padding: 16px;
             }
-        }
 
-        .metric-card .metric-icon {
-            width: 44px;
-            height: 44px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            border-radius: 999px;
-            flex: 0 0 auto;
-        }
-
-        .metric-value {
-            font-size: 28px;
-            line-height: 1;
-            font-weight: 800;
-        }
-
-        .table thead th {
-            font-size: 12px;
-            text-transform: uppercase;
-            letter-spacing: .04em;
+            .chart-wrap,
+            .chart-wrap-sm {
+                min-height: 240px;
+            }
         }
     </style>
 </head>
 
 <body>
 
-    <!-- Sidebar -->
     <div class="sidebar" id="sidebar">
         <div class="brand">
             <img src="../images/logo.png" alt="ChemEase Logo">
@@ -432,14 +544,13 @@ $counts = array_map(fn($x) => $x['count'], $attempts_last_30);
             <?php if ($isSuperAdmin): ?>
                 <div class="nav-item">
                     <a href="Generate_Reports.php" class="nav-link active" data-section="reports">
-                        <i class="fas fa-file-alt"></i><span>Generate Reports</span>
+                        <i class="fas fa-file-alt"></i><span>Reports & Analytics</span>
                     </a>
                 </div>
             <?php endif; ?>
         </nav>
     </div>
 
-    <!-- Top Navbar -->
     <div class="top-navbar" id="topNavbar">
         <?php
         if ($isAdmin) {
@@ -455,13 +566,12 @@ $counts = array_map(fn($x) => $x['count'], $attempts_last_30);
         </div>
     </div>
 
-    <!-- Main Content -->
     <div class="main-content" id="mainContent">
         <div class="dashboard-container">
 
             <div class="page-header">
                 <div>
-                    <div class="page-title">Generate Reports</div>
+                    <div class="page-title">Reports & Analytics</div>
                     <div class="page-subtitle">Analytics snapshot + downloadable reports</div>
                 </div>
 
@@ -477,12 +587,12 @@ $counts = array_map(fn($x) => $x['count'], $attempts_last_30);
                 <div class="alert alert-danger">Access denied. This page is available to <strong>Super Admin</strong> only.</div>
             <?php else: ?>
 
-                <div class="row g-3 mb-3">
-                    <div class="col-12 col-md-4">
+                <div class="row g-3 mb-4">
+                    <div class="col-12 col-md-6 col-xl-2">
                         <div class="card shadow-sm h-100 metric-card">
                             <div class="card-body">
                                 <div class="d-flex align-items-center gap-3">
-                                    <div class="metric-icon" style="background:#e7f7fa;color:#17a2b8;">
+                                    <div class="metric-icon" style="background:#e8f7ee;color:#28a745;">
                                         <i class="fa-solid fa-users"></i>
                                     </div>
                                     <div>
@@ -494,11 +604,43 @@ $counts = array_map(fn($x) => $x['count'], $attempts_last_30);
                         </div>
                     </div>
 
-                    <div class="col-12 col-md-4">
+                    <div class="col-12 col-md-6 col-xl-2">
                         <div class="card shadow-sm h-100 metric-card">
                             <div class="card-body">
                                 <div class="d-flex align-items-center gap-3">
-                                    <div class="metric-icon" style="background:#eaf7ee;color:#28a745;">
+                                    <div class="metric-icon" style="background:#efeaff;color:#6f42c1;">
+                                        <i class="fa-solid fa-user-plus"></i>
+                                    </div>
+                                    <div>
+                                        <div class="metric-value"><?= number_format($new_users_last_30) ?></div>
+                                        <div class="text-muted">New Users (30d)</div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="col-12 col-md-6 col-xl-2">
+                        <div class="card shadow-sm h-100 metric-card">
+                            <div class="card-body">
+                                <div class="d-flex align-items-center gap-3">
+                                    <div class="metric-icon" style="background:#e9f7ff;color:#17a2b8;">
+                                        <i class="fa-solid fa-user-check"></i>
+                                    </div>
+                                    <div>
+                                        <div class="metric-value"><?= number_format($active_users_last_30) ?></div>
+                                        <div class="text-muted">Active Users (30d)</div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="col-12 col-md-6 col-xl-2">
+                        <div class="card shadow-sm h-100 metric-card">
+                            <div class="card-body">
+                                <div class="d-flex align-items-center gap-3">
+                                    <div class="metric-icon" style="background:#e9f7ff;color:#17a2b8;">
                                         <i class="fa-solid fa-clipboard-check"></i>
                                     </div>
                                     <div>
@@ -510,7 +652,7 @@ $counts = array_map(fn($x) => $x['count'], $attempts_last_30);
                         </div>
                     </div>
 
-                    <div class="col-12 col-md-4">
+                    <div class="col-12 col-md-6 col-xl-2">
                         <div class="card shadow-sm h-100 metric-card">
                             <div class="card-body">
                                 <div class="d-flex align-items-center gap-3">
@@ -525,16 +667,62 @@ $counts = array_map(fn($x) => $x['count'], $attempts_last_30);
                             </div>
                         </div>
                     </div>
+
+                    <div class="col-12 col-md-6 col-xl-2">
+                        <div class="card shadow-sm h-100 metric-card">
+                            <div class="card-body">
+                                <div class="d-flex align-items-center gap-3">
+                                    <div class="metric-icon" style="background:#fff1f1;color:#dc3545;">
+                                        <i class="fa-solid fa-award"></i>
+                                    </div>
+                                    <div>
+                                        <div class="metric-value"><?= (int)$pass_rate ?>%</div>
+                                        <div class="text-muted">Pass Rate</div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
                 </div>
 
-                <div class="row g-3">
+                <div class="row g-3 mb-4">
+                    <div class="col-12 col-lg-6">
+                        <div class="card shadow-sm h-100">
+                            <div class="card-header bg-white">
+                                <div class="fw-semibold">Pass Rate</div>
+                            </div>
+                            <div class="card-body">
+                                <div class="chart-wrap-sm">
+                                    <canvas id="passRateChart"></canvas>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="col-12 col-lg-6">
+                        <div class="card shadow-sm h-100">
+                            <div class="card-header bg-white">
+                                <div class="fw-semibold">User Activity (Last 30 Days)</div>
+                            </div>
+                            <div class="card-body">
+                                <div class="chart-wrap-sm">
+                                    <canvas id="activeUsersChart"></canvas>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="row g-3 mb-4">
                     <div class="col-12 col-lg-7">
                         <div class="card shadow-sm h-100">
                             <div class="card-header bg-white d-flex justify-content-between align-items-center">
                                 <div class="fw-semibold">Attempts (Last 30 Days)</div>
                             </div>
                             <div class="card-body">
-                                <canvas id="attemptsChart" height="120"></canvas>
+                                <div class="chart-wrap-sm">
+                                    <canvas id="attemptsChart"></canvas>
+                                </div>
                                 <?php if (empty($attempts_last_30)): ?>
                                     <div class="text-muted small mt-2">No attempts recorded in the last 30 days.</div>
                                 <?php endif; ?>
@@ -547,35 +735,31 @@ $counts = array_map(fn($x) => $x['count'], $attempts_last_30);
                             <div class="card-header bg-white d-flex justify-content-between align-items-center">
                                 <div class="fw-semibold">Top Learners (Avg Score)</div>
                             </div>
-                            <div class="card-body p-0">
-                                <div class="table-responsive">
-                                    <table class="table mb-0 align-middle">
-                                        <thead class="table-light">
-                                            <tr>
-                                                <th style="width:60px;">#</th>
-                                                <th>User</th>
-                                                <th class="text-end">Avg</th>
-                                                <th class="text-end">Attempts</th>
-                                            </tr>
-                                        </thead>
-                                        <tbody>
-                                            <?php if (empty($top_users)): ?>
-                                                <tr>
-                                                    <td colspan="4" class="text-center text-muted py-4">No data.</td>
-                                                </tr>
-                                            <?php else: ?>
-                                                <?php foreach ($top_users as $i => $u): ?>
-                                                    <tr>
-                                                        <td class="fw-semibold"><?= $i + 1 ?></td>
-                                                        <td><?= htmlspecialchars($u['name']) ?></td>
-                                                        <td class="text-end"><?= (int)$u['avg_score'] ?>%</td>
-                                                        <td class="text-end"><?= (int)$u['attempts'] ?></td>
-                                                    </tr>
-                                                <?php endforeach; ?>
-                                            <?php endif; ?>
-                                        </tbody>
-                                    </table>
+                            <div class="card-body">
+                                <div class="chart-wrap">
+                                    <canvas id="topLearnersChart"></canvas>
                                 </div>
+                                <?php if (empty($top_users)): ?>
+                                    <div class="text-muted small mt-2">No learner data available.</div>
+                                <?php endif; ?>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="row g-3">
+                    <div class="col-12">
+                        <div class="card shadow-sm h-100">
+                            <div class="card-header bg-white d-flex justify-content-between align-items-center">
+                                <div class="fw-semibold">Top Learning Material Engagement</div>
+                            </div>
+                            <div class="card-body">
+                                <div class="chart-wrap">
+                                    <canvas id="materialEngagementChart"></canvas>
+                                </div>
+                                <?php if (empty($material_engagement)): ?>
+                                    <div class="text-muted small mt-2">No material engagement data available.</div>
+                                <?php endif; ?>
                             </div>
                         </div>
                     </div>
@@ -608,37 +792,190 @@ $counts = array_map(fn($x) => $x['count'], $attempts_last_30);
             const labels = <?= json_encode($labels) ?>;
             const counts = <?= json_encode($counts) ?>;
 
-            const canvas = document.getElementById('attemptsChart');
-            if (!canvas) return;
+            const topUserLabels = <?= json_encode($topUserLabels) ?>;
+            const topUserScores = <?= json_encode($topUserScores) ?>;
 
-            new Chart(canvas, {
-                type: 'line',
-                data: {
-                    labels,
-                    datasets: [{
-                        label: 'Attempts',
-                        data: counts,
-                        tension: 0.35,
-                        fill: true,
-                    }]
-                },
-                options: {
-                    responsive: true,
-                    plugins: {
-                        legend: {
-                            display: false
-                        }
+            const materialLabels = <?= json_encode($materialLabels) ?>;
+            const materialUsers = <?= json_encode($materialUsers) ?>;
+
+            const passRateLabels = <?= json_encode($passRateLabels) ?>;
+            const passRateCounts = <?= json_encode($passRateCounts) ?>;
+
+            const activeUserLabels = <?= json_encode($activeUserLabels) ?>;
+            const activeUserCounts = <?= json_encode($activeUserCounts) ?>;
+
+            function createHorizontalBarChart(id, labels, data, labelText, backgroundColor = '#17a2b8') {
+                const canvas = document.getElementById(id);
+                if (!canvas || !labels.length) return;
+
+                new Chart(canvas, {
+                    type: 'bar',
+                    data: {
+                        labels,
+                        datasets: [{
+                            label: labelText,
+                            data: data,
+                            backgroundColor: backgroundColor,
+                            borderRadius: 8,
+                            barThickness: 18
+                        }]
                     },
-                    scales: {
-                        y: {
-                            beginAtZero: true,
-                            ticks: {
-                                precision: 0
+                    options: {
+                        indexAxis: 'y',
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        plugins: {
+                            legend: {
+                                display: true,
+                                position: 'top',
+                                labels: {
+                                    boxWidth: 12,
+                                    usePointStyle: false
+                                }
+                            },
+                            tooltip: {
+                                callbacks: {
+                                    label: function(context) {
+                                        return `${context.dataset.label}: ${context.raw}`;
+                                    }
+                                }
+                            }
+                        },
+                        scales: {
+                            x: {
+                                beginAtZero: true,
+                                ticks: {
+                                    precision: 0
+                                }
+                            },
+                            y: {
+                                ticks: {
+                                    autoSkip: false
+                                }
                             }
                         }
                     }
-                }
-            });
+                });
+            }
+
+            function createDoughnutChart(id, labels, data, colors) {
+                const canvas = document.getElementById(id);
+                if (!canvas) return;
+
+                new Chart(canvas, {
+                    type: 'doughnut',
+                    data: {
+                        labels,
+                        datasets: [{
+                            data: data,
+                            backgroundColor: colors,
+                            borderWidth: 1
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        cutout: '62%',
+                        plugins: {
+                            legend: {
+                                display: true,
+                                position: 'bottom',
+                                labels: {
+                                    padding: 14,
+                                    boxWidth: 12
+                                }
+                            },
+                            tooltip: {
+                                callbacks: {
+                                    label: function(context) {
+                                        return `${context.label}: ${context.raw}`;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                });
+            }
+
+            const attemptsCanvas = document.getElementById('attemptsChart');
+            if (attemptsCanvas) {
+                new Chart(attemptsCanvas, {
+                    type: 'line',
+                    data: {
+                        labels: labels,
+                        datasets: [{
+                            label: 'Attempts',
+                            data: counts,
+                            tension: 0.35,
+                            fill: true,
+                            borderColor: '#17a2b8',
+                            backgroundColor: 'rgba(23, 162, 184, 0.15)',
+                            pointBackgroundColor: '#17a2b8',
+                            pointBorderColor: '#17a2b8',
+                            pointRadius: 3,
+                            pointHoverRadius: 5
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        plugins: {
+                            legend: {
+                                display: true,
+                                position: 'top',
+                                labels: {
+                                    boxWidth: 12
+                                }
+                            },
+                            tooltip: {
+                                callbacks: {
+                                    label: function(context) {
+                                        return `Attempts: ${context.raw}`;
+                                    }
+                                }
+                            }
+                        },
+                        scales: {
+                            y: {
+                                beginAtZero: true,
+                                ticks: {
+                                    precision: 0
+                                }
+                            }
+                        }
+                    }
+                });
+            }
+
+            createHorizontalBarChart(
+                'topLearnersChart',
+                topUserLabels,
+                topUserScores,
+                'Average Score (%)',
+                '#17a2b8'
+            );
+
+            createHorizontalBarChart(
+                'materialEngagementChart',
+                materialLabels,
+                materialUsers,
+                'Engaged Users',
+                '#6f42c1'
+            );
+
+            createDoughnutChart(
+                'passRateChart',
+                passRateLabels,
+                passRateCounts,
+                ['#28a745', '#dc3545']
+            );
+
+            createDoughnutChart(
+                'activeUsersChart',
+                activeUserLabels,
+                activeUserCounts,
+                ['#17a2b8', '#dee2e6']
+            );
         })();
     </script>
 </body>
