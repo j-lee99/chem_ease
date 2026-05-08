@@ -366,6 +366,154 @@
                 transform: translateY(0);
             }
         }
+
+
+        /* Mobile responsiveness / scroll fix
+           Overrides signin.css rules that may force a fixed 100vh layout. */
+        html,
+        body {
+            width: 100%;
+            min-height: 100%;
+            height: auto !important;
+            overflow-x: hidden;
+            overflow-y: auto !important;
+        }
+
+        body {
+            min-height: 100vh;
+            min-height: 100dvh;
+            -webkit-overflow-scrolling: touch;
+        }
+
+        .form-container {
+            width: 100%;
+            min-height: 100vh;
+            min-height: 100dvh;
+            height: auto !important;
+            overflow: visible !important;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: clamp(1rem, 3vw, 2rem);
+        }
+
+        .form-card {
+            width: min(100%, 460px);
+            max-height: none !important;
+            overflow: visible !important;
+            margin: auto;
+        }
+
+        #loginForm {
+            min-width: 0;
+        }
+
+        .submit-btn,
+        .submit-btn-guest {
+            min-width: 0;
+            white-space: normal;
+            text-align: center;
+        }
+
+        .guest-btn-content,
+        .guest-btn-main,
+        .guest-btn-sub {
+            max-width: 100%;
+        }
+
+        .guest-btn-main {
+            justify-content: center;
+            flex-wrap: wrap;
+        }
+
+        @media (max-width: 768px) {
+            .form-container {
+                align-items: flex-start;
+                justify-content: center;
+                padding: 1rem;
+                padding-top: max(1rem, env(safe-area-inset-top));
+                padding-bottom: max(1.25rem, env(safe-area-inset-bottom));
+            }
+
+            .form-card {
+                width: 100%;
+                margin: 0 auto;
+                border-radius: 18px;
+            }
+
+            .logo-container {
+                margin-bottom: 1rem;
+            }
+
+            .logo-icon {
+                max-width: 88px;
+                height: auto;
+            }
+
+            .form-title {
+                font-size: clamp(1.55rem, 7vw, 2rem);
+                line-height: 1.15;
+            }
+
+            .form-subtitle {
+                font-size: 0.92rem;
+            }
+
+            .form-group {
+                margin-bottom: 1rem;
+            }
+
+            .forgot-password {
+                margin-bottom: 1rem;
+            }
+
+            .auth-divider {
+                margin: 1rem 0 0.75rem;
+            }
+
+            .submit-btn,
+            .submit-btn-guest {
+                min-height: 48px;
+                padding: 0.82rem 0.9rem;
+                font-size: 0.98rem;
+            }
+
+            .guest-btn-main {
+                font-size: 0.95rem;
+            }
+
+            .guest-btn-sub {
+                font-size: 0.72rem;
+                line-height: 1.25;
+            }
+
+            .input-container:focus-within {
+                transform: none !important;
+            }
+        }
+
+        @media (max-width: 380px) {
+            .form-container {
+                padding-left: 0.7rem;
+                padding-right: 0.7rem;
+            }
+
+            .form-card {
+                border-radius: 16px;
+            }
+
+            .submit-btn,
+            .submit-btn-guest {
+                min-height: 46px;
+                padding: 0.75rem;
+            }
+
+            .auth-divider {
+                font-size: 0.72rem;
+                gap: 0.55rem;
+            }
+        }
+
     </style>
 </head>
 <body>
@@ -591,10 +739,11 @@
                 }
             });
             // Input focus & real-time validation
+            const canUseInputScale = () => window.matchMedia('(min-width: 769px)').matches;
             document.querySelectorAll('.form-input').forEach(input => {
                 const container = input.closest('.input-container');
                 input.addEventListener('focus', () => {
-                    container.style.transform = 'scale(1.02)';
+                    container.style.transform = canUseInputScale() ? 'scale(1.02)' : 'none';
                     input.closest('.form-group').querySelector('.form-label').style.color = 'var(--primary-blue)';
                 });
                 input.addEventListener('blur', () => {
