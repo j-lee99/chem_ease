@@ -59,15 +59,7 @@ if ($is_guest) {
     }
 
     if (empty($history)) {
-        $history[] = [
-            'title' => 'No guest exam attempts yet',
-            'category' => '—',
-            'score' => 0,
-            'date' => '—',
-            'time_taken' => '—',
-            'status' => '—',
-            'passing_score' => 0
-        ];
+        $history = [];
     }
 
     echo json_encode($history);
@@ -82,7 +74,8 @@ if (!$user_id) {
 /* ---------------------------------------------------------
    SAFE QUERY HELPER
 --------------------------------------------------------- */
-function query($sql, $params = [], $types = "") {
+function query($sql, $params = [], $types = "")
+{
     global $conn;
     $stmt = mysqli_prepare($conn, $sql);
     if (!$stmt) {
@@ -152,16 +145,7 @@ while ($row = mysqli_fetch_assoc($result)) {
 }
 
 if (empty($history)) {
-    $history[] = [
-        'title' => 'No exam attempts yet',
-        'category' => '—',
-        'score' => 0,
-        'date' => '—',
-        'time_taken' => '—',
-        'status' => '—',
-        'passing_score' => 0
-    ];
+    $history = [];
 }
 
 echo json_encode($history);
-?>
