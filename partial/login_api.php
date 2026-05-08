@@ -35,6 +35,7 @@ $stmt = $conn->prepare("
     FROM users
     WHERE email = ?
       AND is_deleted = 0
+      AND is_active = 1
     LIMIT 1
 ");
 $stmt->bind_param("s", $email);

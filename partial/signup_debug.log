@@ -1,0 +1,43 @@
+[2026-03-30 10:54:01] request_started {"fullName":"Leroy Oneil","email":"joshualee.dev99+3@gmail.com","mobile":"09915830605","birthday":"1999-11-01","address":"Tester address 123","hasPassword":true,"hasConfirmPassword":true,"terms_raw":"1","method":"POST"}
+[2026-03-30 18:54:01] insert_failed {"db_error":"Duplicate entry '2026-STU-0018' for key 'u_uid'","db_errno":1062,"user_uuid":"2026-STU-0018","email":"joshualee.dev99+3@gmail.com","mobile":"09915830605"}
+[2026-03-30 10:56:25] request_started {"fullName":"Leroy Oneil","email":"joshualee.dev99+3@gmail.com","mobile":"09915830605","birthday":"1999-09-11","address":"Test address 123","hasPassword":true,"hasConfirmPassword":true,"terms_raw":"1","method":"POST"}
+[2026-03-30 18:56:25] insert_success {"user_id":162,"user_uuid":"2026-STU-0061","email":"joshualee.dev99+3@gmail.com"}
+[2026-03-30 18:56:28] email_sent {"email":"joshualee.dev99+3@gmail.com","user_id":162}
+[2026-03-30 11:32:34] request_started {"fullName":"Kylie Mejes","email":"kyliecamposanomejes@gmail.com","mobile":"09107641769","birthday":"2003-03-30","address":"Bacacay","hasPassword":true,"hasConfirmPassword":true,"terms_raw":"1","method":"POST"}
+[2026-03-30 19:32:34] insert_success {"user_id":163,"user_uuid":"2026-STU-0062","email":"kyliecamposanomejes@gmail.com"}
+[2026-03-30 19:32:36] email_sent {"email":"kyliecamposanomejes@gmail.com","user_id":163}
+[2026-04-02 13:48:50] request_started {"fullName":"Rayah Mejes","email":"rialyncamposanomejes@gmail.com","mobile":"09957913581","birthday":"2003-04-02","address":"Purok 8","hasPassword":true,"hasConfirmPassword":true,"terms_raw":"1","method":"POST"}
+[2026-04-02 13:49:02] request_started {"fullName":"Rayah Mejes","email":"rialynmejes@gmail.com","mobile":"09957913581","birthday":"2003-04-02","address":"Purok 8","hasPassword":true,"hasConfirmPassword":true,"terms_raw":"1","method":"POST"}
+[2026-04-02 13:49:11] request_started {"fullName":"Rayah Mejes","email":"rialynmejes@gmail.com","mobile":"09957913581","birthday":"2003-04-02","address":"Purok 8","hasPassword":true,"hasConfirmPassword":true,"terms_raw":"1","method":"POST"}
+[2026-04-02 13:49:23] request_started {"fullName":"Rayah Mejes","email":"rialynmejes@gmail.com","mobile":"09107641769","birthday":"2003-04-02","address":"Purok 8","hasPassword":true,"hasConfirmPassword":true,"terms_raw":"1","method":"POST"}
+[2026-04-02 13:50:07] request_started {"fullName":"Rayah Mejes","email":"rialynmejes@gmail.com","mobile":"+639107641769","birthday":"2003-04-02","address":"Purok 8","hasPassword":true,"hasConfirmPassword":true,"terms_raw":"1","method":"POST"}
+[2026-04-02 21:50:07] insert_success {"user_id":164,"user_uuid":"2026-STU-0063","email":"rialynmejes@gmail.com"}
+[2026-04-02 21:50:10] email_sent {"email":"rialynmejes@gmail.com","user_id":164}
+[2026-04-08 05:46:47] request_started {"fullName":"Kazuki Sudo","email":"ytn2022-9703-63780@bicol-u.edu.ph","mobile":"09178912276","birthday":"2003-09-13","address":"Street 123, Mexico, Pampanga","hasPassword":true,"hasConfirmPassword":true,"terms_raw":"1","method":"POST"}
+[2026-04-08 13:46:47] insert_success {"user_id":165,"user_uuid":"2026-STU-0064","email":"ytn2022-9703-63780@bicol-u.edu.ph"}
+[2026-04-08 13:46:51] email_sent {"email":"ytn2022-9703-63780@bicol-u.edu.ph","user_id":165}
+[2026-04-13 05:32:26] request_started {"fullName":"jade crow","email":"wawaw@gmail.com","mobile":"+639916040407","birthday":"2000-12-01","address":"BRGY27 VICTORY VILLAGE LEG. CITY ALBA","hasPassword":true,"hasConfirmPassword":true,"terms_raw":"1","method":"POST"}
+[2026-04-13 13:32:26] insert_success {"user_id":170,"user_uuid":"2026-STU-0065","email":"wawaw@gmail.com"}
+[2026-04-13 13:32:29] email_sent {"email":"wawaw@gmail.com","user_id":170}
+[2026-04-13 05:34:46] request_started {"fullName":"John Doer","email":"ghelibeans888@gmail.com","mobile":"09302270401","birthday":"2000-12-01","address":"BRGY31 Legazpi City","hasPassword":true,"hasConfirmPassword":true,"terms_raw":"1","method":"POST"}
+[2026-04-13 05:35:12] request_started {"fullName":"John Doer","email":"ghelibeans888@gmail.com","mobile":"09227043221","birthday":"2000-12-01","address":"BRGY31 Legazpi City","hasPassword":true,"hasConfirmPassword":true,"terms_raw":"1","method":"POST"}
+[2026-04-13 13:35:12] insert_success {"user_id":171,"user_uuid":"2026-STU-0066","email":"ghelibeans888@gmail.com"}
+[2026-04-13 13:35:15] email_sent {"email":"ghelibeans888@gmail.com","user_id":171}
+[2026-04-14 01:38:15] request_started {"fullName":"Ian Merico","email":"iandump62@gmail.com","mobile":"+639651231457","birthday":"2004-01-02","address":"122 st. likong kaliwa","hasPassword":true,"hasConfirmPassword":true,"terms_raw":"1","method":"POST"}
+[2026-04-14 09:38:15] insert_success {"user_id":172,"user_uuid":"2026-STU-0067","email":"iandump62@gmail.com"}
+[2026-04-14 09:38:18] email_sent {"email":"iandump62@gmail.com","user_id":172}
+[2026-04-14 01:38:32] request_started {"fullName":"Ian Remico","email":"tonyo15gonzales@gmail.com","mobile":"09454337943","birthday":"2000-11-22","address":"Polaris, Bel-Air, Makati","hasPassword":true,"hasConfirmPassword":true,"terms_raw":"1","method":"POST"}
+[2026-04-14 09:38:32] insert_success {"user_id":173,"user_uuid":"2026-STU-0068","email":"tonyo15gonzales@gmail.com"}
+[2026-04-14 09:38:35] email_sent {"email":"tonyo15gonzales@gmail.com","user_id":173}
+[2026-04-14 03:07:17] request_started {"fullName":"Jennel Arevalo","email":"jennel215@gmail.com","mobile":"09667135508","birthday":"2000-11-15","address":"Pasay City","hasPassword":true,"hasConfirmPassword":true,"terms_raw":"1","method":"POST"}
+[2026-04-14 11:07:17] insert_success {"user_id":174,"user_uuid":"2026-STU-0069","email":"jennel215@gmail.com"}
+[2026-04-14 11:07:20] email_sent {"email":"jennel215@gmail.com","user_id":174}
+[2026-04-15 02:01:22] request_started {"fullName":"Eunice Jael Orajay","email":"eunicejael123@gmail.com","mobile":"09451672558","birthday":"2001-04-11","address":"Brgy. San Antonio","hasPassword":true,"hasConfirmPassword":true,"terms_raw":"1","method":"POST"}
+[2026-04-15 10:01:22] insert_success {"user_id":175,"user_uuid":"2026-STU-0070","email":"eunicejael123@gmail.com"}
+[2026-04-15 10:01:25] email_sent {"email":"eunicejael123@gmail.com","user_id":175}
+[2026-04-21 01:51:08] request_started {"fullName":"Glad Tea","email":"gladteafurniture625@gmail.com","mobile":"09665386050","birthday":"2003-11-28","address":"Guinobatan, Albay","hasPassword":true,"hasConfirmPassword":true,"terms_raw":"1","method":"POST"}
+[2026-04-21 09:51:08] insert_success {"user_id":176,"user_uuid":"2026-STU-0071","email":"gladteafurniture625@gmail.com"}
+[2026-04-21 09:51:11] email_sent {"email":"gladteafurniture625@gmail.com","user_id":176}
+[2026-04-27 11:07:14] request_started {"fullName":"Leroy Oneil","email":"test_email@gmail.com","mobile":"09915830606","birthday":"2002-02-20","address":"Tester 123","hasPassword":true,"hasConfirmPassword":true,"terms_raw":"1","method":"POST"}
+[2026-04-27 19:07:14] insert_success {"user_id":177,"user_uuid":"2026-STU-0072","email":"test_email@gmail.com"}
+[2026-04-27 19:07:17] email_sent {"email":"test_email@gmail.com","user_id":177}

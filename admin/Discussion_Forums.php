@@ -5,6 +5,39 @@ require_once '../partial/db_conn.php';
 $role = $_SESSION['role'] ?? '';
 $isAdmin = ($role === 'admin');
 $isSuperAdmin = ($role === 'super_admin');
+
+$user_id = $_SESSION['user_id'];
+
+$stmt = $conn->prepare("
+    SELECT full_name, profile_image
+    FROM users
+    WHERE id = ? AND is_deleted = 0
+");
+$stmt->bind_param("i", $user_id);
+$stmt->execute();
+$user = $stmt->get_result()->fetch_assoc();
+$stmt->close();
+
+$full_name = $user['full_name'] ?? 'Admin';
+$profile_image = $user['profile_image'] ?? '';
+
+$initials = '';
+$name_parts = explode(' ', trim($full_name));
+
+foreach ($name_parts as $part) {
+    if (!empty($part)) {
+        $initials .= strtoupper(substr($part, 0, 1));
+    }
+
+    if (strlen($initials) >= 2) {
+        break;
+    }
+}
+
+if (empty($initials)) {
+    $initials = 'A';
+}
+
 if (!isset($_SESSION['user_id']) || !in_array(($_SESSION['role'] ?? ''), ['admin', 'super_admin'], true)) {
     header("Location: ../index.php");
     exit();
@@ -61,6 +94,15 @@ if (!isset($_SESSION['user_id']) || !in_array(($_SESSION['role'] ?? ''), ['admin
     <meta name="msapplication-square150x150logo" content="/ms-icon-150x150.png">
     <meta name="msapplication-square310x310logo" content="/ms-icon-310x310.png">
     <style>
+    
+    :root {
+            --primary: #17a2b8;
+            --success: #28a745;
+            --warning: #ffc107;
+            --danger: #dc3545;
+            --purple: #6f42c1;
+            --orange: #fd7e14;
+        }
         .avatar-wrapper {
             position: relative;
             width: 50px;
@@ -105,6 +147,64 @@ if (!isset($_SESSION['user_id']) || !in_array(($_SESSION['role'] ?? ''), ['admin
             justify-content: center;
             font-size: 1rem;
         }
+        
+        .profile-dropdown {
+    position: relative;
+}
+
+.profile-trigger {
+    width: 42px;
+    height: 42px;
+    border-radius: 50%;
+    overflow: hidden;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: 2px solid rgba(255,255,255,0.35);
+    background: rgba(255,255,255,0.1);
+    transition: all 0.2s ease;
+}
+
+.profile-trigger:hover {
+    background: rgba(255,255,255,0.15);
+    border-color: rgba(255,255,255,0.6);
+}
+
+.profile-img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+.profile-initials {
+    width: 100%;
+    height: 100%;
+    background: #ffffff;
+    color: var(--primary);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 700;
+    font-size: 14px;
+}
+
+.dropdown-menu {
+    min-width: 230px;
+    border: none;
+    border-radius: 12px;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.15);
+    overflow: hidden;
+}
+
+.dropdown-item {
+    padding: 10px 16px;
+    font-size: 14px;
+}
+
+.dropdown-item i {
+    width: 18px;
+}
     </style>
 </head>
 
@@ -134,7 +234,7 @@ if (!isset($_SESSION['user_id']) || !in_array(($_SESSION['role'] ?? ''), ['admin
                 </div>
             <?php endif; ?>
             <?php if ($isSuperAdmin): ?>
-                <div class="nav-item"><a href="Generate_Reports.php" class="nav-link"><i class="fas fa-file-alt"></i><span>Generate Reports</span></a></div>
+                <div class="nav-item"><a href="Generate_Reports.php" class="nav-link"><i class="fas fa-file-alt"></i><span>Reports & Analytics</span></a></div>
             <?php endif; ?>
         </nav>
     </div>
@@ -151,8 +251,67 @@ if (!isset($_SESSION['user_id']) || !in_array(($_SESSION['role'] ?? ''), ['admin
         }
         ?>
         <div class="navbar-actions">
-            <a href="https://chemease.site/" class="logout-btn"><i class="fas fa-sign-out-alt"></i> LOGOUT</a>
+    <div class="dropdown profile-dropdown">
+        <div
+            class="profile-trigger"
+            id="adminProfileDropdown"
+            data-bs-toggle="dropdown"
+            aria-expanded="false"
+            role="button"
+        >
+            <?php if ($profile_image && file_exists('../' . $profile_image)): ?>
+                <img
+                    src="../<?php echo htmlspecialchars($profile_image); ?>?t=<?php echo time(); ?>"
+                    alt="Profile"
+                    class="profile-img"
+                >
+            <?php else: ?>
+                <div class="profile-initials">
+                    <?php echo htmlspecialchars($initials); ?>
+                </div>
+            <?php endif; ?>
         </div>
+
+        <ul class="dropdown-menu dropdown-menu-end" aria-labelledby="adminProfileDropdown">
+            <li class="dropdown-header px-3 py-2">
+                <strong><?php echo htmlspecialchars($full_name); ?></strong><br>
+                <small class="text-muted">
+                    <?php echo $isSuperAdmin ? 'Super Admin' : 'Admin'; ?>
+                </small>
+            </li>
+
+            <li><hr class="dropdown-divider"></li>
+
+            <li>
+                <a class="dropdown-item" href="Profile_Settings.php">
+                    <i class="fas fa-user-cog me-2"></i> Profile Settings
+                </a>
+            </li>
+
+            <?php if ($isSuperAdmin): ?>
+                <li>
+                    <a class="dropdown-item" href="Settings.php">
+                        <i class="fas fa-cog me-2"></i> System Settings
+                    </a>
+                </li>
+            <?php endif; ?>
+
+            <!--<li>-->
+            <!--    <a class="dropdown-item" href="index.php">-->
+            <!--        <i class="fas fa-home me-2"></i> Dashboard-->
+            <!--    </a>-->
+            <!--</li>-->
+
+            <li><hr class="dropdown-divider"></li>
+
+            <li>
+                <a class="dropdown-item text-danger" href="../partial/logout.php">
+                    <i class="fas fa-sign-out-alt me-2"></i> Logout
+                </a>
+            </li>
+        </ul>
+    </div>
+</div>
     </div>
 
     <!-- Main Content -->

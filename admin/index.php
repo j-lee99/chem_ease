@@ -6,6 +6,50 @@ $role = $_SESSION['role'] ?? '';
 $isAdmin = ($role === 'admin');
 $isSuperAdmin = ($role === 'super_admin');
 
+$user_id = $_SESSION['user_id'];
+
+$stmt = $conn->prepare("
+    SELECT full_name, profile_image
+    FROM users
+    WHERE id = ? AND is_deleted = 0
+");
+$stmt->bind_param("i", $user_id);
+$stmt->execute();
+$user = $stmt->get_result()->fetch_assoc();
+$stmt->close();
+
+$full_name = $user['full_name'] ?? 'Admin';
+$profile_image = $user['profile_image'] ?? '';
+
+$initials = '';
+$name_parts = explode(' ', trim($full_name));
+
+foreach ($name_parts as $part) {
+    if (!empty($part)) {
+        $initials .= strtoupper(substr($part, 0, 1));
+    }
+
+    if (strlen($initials) >= 2) {
+        break;
+    }
+}
+
+if (empty($initials)) {
+    $initials = 'A';
+}
+
+$settings = [
+    'maintenance_mode' => 0,
+    'maintenance_message' => '',
+    'site_banner_enabled' => 0,
+    'site_banner_message' => ''
+];
+
+$settingsQuery = $conn->query("SELECT * FROM system_settings WHERE id = 1 LIMIT 1");
+if ($settingsQuery && $settingsQuery->num_rows > 0) {
+    $settings = $settingsQuery->fetch_assoc();
+}
+
 // Allow only admin & superAdmin into this panel
 if (!isset($_SESSION['user_id']) || !in_array($role, ['admin', 'super_admin'], true)) {
     header("Location: ../index.php");
@@ -175,6 +219,143 @@ if (!isset($_SESSION['user_id']) || !in_array($role, ['admin', 'super_admin'], t
             font-size: 18px;
         }
 
+        .profile-dropdown {
+            position: relative;
+        }
+        
+        .profile-trigger {
+            width: 42px;
+            height: 42px;
+            border-radius: 50%;
+            overflow: hidden;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border: 2px solid rgba(255,255,255,0.35);
+            background: rgba(255,255,255,0.1);
+            transition: all 0.2s ease;
+        }
+        
+        .profile-trigger:hover {
+            background: rgba(255,255,255,0.15);
+            border-color: rgba(255,255,255,0.6);
+        }
+        
+        .profile-img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+        
+        .profile-initials {
+            width: 100%;
+            height: 100%;
+            background: #ffffff;
+            color: var(--primary);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 700;
+            font-size: 14px;
+        }
+        
+         .visit-stat-card {
+                background: linear-gradient(135deg, rgba(23, 162, 184, 0.08), rgba(32, 197, 212, 0.12));
+                border: 1px solid rgba(23, 162, 184, 0.15);
+                border-radius: 14px;
+                padding: 1rem;
+                height: 100%;
+            }
+            
+            .visit-stat-label {
+                color: #64748b;
+                font-size: 0.82rem;
+                font-weight: 700;
+                text-transform: uppercase;
+                letter-spacing: 0.04em;
+                margin-bottom: 0.45rem;
+            }
+            
+            .visit-stat-value {
+                color: #0f766e;
+                font-size: 1.8rem;
+                font-weight: 800;
+                line-height: 1;
+            }
+            
+            .visit-page-row,
+            .visit-daily-row {
+                margin-bottom: 1rem;
+            }
+            
+            .visit-page-label,
+            .visit-daily-label {
+                display: flex;
+                justify-content: space-between;
+                gap: 1rem;
+                font-size: 0.9rem;
+                font-weight: 700;
+                margin-bottom: 0.35rem;
+            }
+            
+            .visit-bar-track {
+                background: #e2e8f0;
+                border-radius: 999px;
+                height: 8px;
+                overflow: hidden;
+            }
+            
+            .visit-bar-fill {
+                background: linear-gradient(135deg, #17a2b8, #20c5d4);
+                height: 100%;
+                border-radius: 999px;
+                transition: width 0.35s ease;
+            }
+            
+            .role-pill {
+                display: inline-flex;
+                align-items: center;
+                padding: 0.2rem 0.55rem;
+                border-radius: 999px;
+                font-size: 0.75rem;
+                font-weight: 700;
+                background: #e2e8f0;
+                color: #334155;
+            }
+            
+            .role-pill.guest {
+                background: #fef3c7;
+                color: #92400e;
+            }
+            
+            .role-pill.user {
+                background: #dcfce7;
+                color: #166534;
+            }
+            
+            .role-pill.admin,
+            .role-pill.super_admin {
+                background: #dbeafe;
+                color: #1e40af;
+            }
+        
+        .dropdown-menu {
+            min-width: 230px;
+            border: none;
+            border-radius: 12px;
+            box-shadow: 0 8px 24px rgba(0,0,0,0.15);
+            overflow: hidden;
+        }
+        
+        .dropdown-item {
+            padding: 10px 16px;
+            font-size: 14px;
+        }
+        
+        .dropdown-item i {
+            width: 18px;
+        }
         .top-navbar {
             background: var(--primary);
             padding: 12px 30px;
@@ -594,7 +775,7 @@ if (!isset($_SESSION['user_id']) || !in_array($role, ['admin', 'super_admin'], t
                 <div class="nav-item">
                     <a href="Generate_Reports.php" class="nav-link">
                         <i class="fas fa-file-alt"></i>
-                        <span>Generate Reports</span>
+                        <span>Reports & Analytics</span>
                     </a>
                 </div>
             <?php endif; ?>
@@ -613,10 +794,66 @@ if (!isset($_SESSION['user_id']) || !in_array($role, ['admin', 'super_admin'], t
         }
         ?>
         <div class="navbar-actions">
-            <a href="https://chemease.site/" class="logout-btn">
-                <i class="fas fa-sign-out-alt"></i>
-                LOGOUT
-            </a>
+            <div class="dropdown profile-dropdown">
+                <div
+                    class="profile-trigger"
+                    id="adminProfileDropdown"
+                    data-bs-toggle="dropdown"
+                    aria-expanded="false"
+                    role="button"
+                >
+                    <?php if ($profile_image && file_exists('../' . $profile_image)): ?>
+                        <img
+                            src="../<?php echo htmlspecialchars($profile_image); ?>?t=<?php echo time(); ?>"
+                            alt="Profile"
+                            class="profile-img"
+                        >
+                    <?php else: ?>
+                        <div class="profile-initials">
+                            <?php echo htmlspecialchars($initials); ?>
+                        </div>
+                    <?php endif; ?>
+                </div>
+        
+                <ul class="dropdown-menu dropdown-menu-end" aria-labelledby="adminProfileDropdown">
+                    <li class="dropdown-header px-3 py-2">
+                        <strong><?php echo htmlspecialchars($full_name); ?></strong><br>
+                        <small class="text-muted">
+                            <?php echo $isSuperAdmin ? 'Super Admin' : 'Admin'; ?>
+                        </small>
+                    </li>
+        
+                    <li><hr class="dropdown-divider"></li>
+        
+                    <li>
+                        <a class="dropdown-item" href="Profile_Settings.php">
+                            <i class="fas fa-user-cog me-2"></i> Profile Settings
+                        </a>
+                    </li>
+        
+                    <?php if ($isSuperAdmin): ?>
+                        <li>
+                            <a class="dropdown-item" href="Settings.php">
+                                <i class="fas fa-cog me-2"></i> System Settings
+                            </a>
+                        </li>
+                    <?php endif; ?>
+        
+                    <!--<li>-->
+                    <!--    <a class="dropdown-item" href="index.php">-->
+                    <!--        <i class="fas fa-home me-2"></i> Dashboard-->
+                    <!--    </a>-->
+                    <!--</li>-->
+        
+                    <li><hr class="dropdown-divider"></li>
+        
+                    <li>
+                        <a class="dropdown-item text-danger" href="../partial/logout.php">
+                            <i class="fas fa-sign-out-alt me-2"></i> Logout
+                        </a>
+                    </li>
+                </ul>
+            </div>
         </div>
     </div>
 
@@ -688,7 +925,92 @@ if (!isset($_SESSION['user_id']) || !in_array($role, ['admin', 'super_admin'], t
                     </div>
                 <?php endif; ?>
             </div>
-
+            
+            <div class="card shadow-sm border-0 mb-4">
+                <div class="card-header bg-white d-flex justify-content-between align-items-center flex-wrap gap-2">
+                    <div>
+                        <h5 class="mb-0 fw-bold">User Visits</h5>
+                        <small class="text-muted">Page visits from users and guests</small>
+                    </div>
+            
+                    <select id="visitRange" class="form-select form-select-sm" style="width: 130px;">
+                        <option value="24h">Last 24h</option>
+                        <option value="7d" selected>Last 7 days</option>
+                        <option value="30d">Last 30 days</option>
+                        <option value="90d">Last 90 days</option>
+                    </select>
+                </div>
+            
+                <div class="card-body">
+                    <div class="row g-3 mb-4">
+                        <div class="col-md-3 col-6">
+                            <div class="visit-stat-card">
+                                <div class="visit-stat-label">Total Visits</div>
+                                <div class="visit-stat-value" id="visitTotal">--</div>
+                            </div>
+                        </div>
+            
+                        <div class="col-md-3 col-6">
+                            <div class="visit-stat-card">
+                                <div class="visit-stat-label">Unique Sessions</div>
+                                <div class="visit-stat-value" id="visitSessions">--</div>
+                            </div>
+                        </div>
+            
+                        <div class="col-md-3 col-6">
+                            <div class="visit-stat-card">
+                                <div class="visit-stat-label">Logged-in Users</div>
+                                <div class="visit-stat-value" id="visitUsers">--</div>
+                            </div>
+                        </div>
+            
+                        <div class="col-md-3 col-6">
+                            <div class="visit-stat-card">
+                                <div class="visit-stat-label">Guest Visits</div>
+                                <div class="visit-stat-value" id="visitGuests">--</div>
+                            </div>
+                        </div>
+                    </div>
+            
+                    <div class="row g-4">
+                        <div class="col-lg-6">
+                            <h6 class="fw-bold mb-3">Visits by Page</h6>
+                            <div id="visitsByPage">
+                                <div class="text-muted">Loading...</div>
+                            </div>
+                        </div>
+            
+                        <div class="col-lg-6">
+                            <h6 class="fw-bold mb-3">Daily Visits</h6>
+                            <div id="dailyVisits">
+                                <div class="text-muted">Loading...</div>
+                            </div>
+                        </div>
+                    </div>
+            
+                    <hr class="my-4">
+            
+                    <h6 class="fw-bold mb-3">Recent Visits</h6>
+                    <div class="table-responsive">
+                        <table class="table table-sm align-middle">
+                            <thead>
+                                <tr>
+                                    <th>Visitor</th>
+                                    <th>Role</th>
+                                    <th>Page</th>
+                                    <th>Visited At</th>
+                                </tr>
+                            </thead>
+                            <tbody id="recentVisitsTable">
+                                <tr>
+                                    <td colspan="4" class="text-muted">Loading...</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+            
             <!-- Charts Section -->
             <div class="charts-section">
                 <?php
@@ -746,6 +1068,87 @@ if (!isset($_SESSION['user_id']) || !in_array($role, ['admin', 'super_admin'], t
                     </button>
                 </div>
             </div>
+            
+             <!--<?php if ($isSuperAdmin): ?>-->
+             <!--   <div class="chart-card mb-4">-->
+             <!--       <div class="chart-header">-->
+             <!--           <h3 class="chart-title">-->
+             <!--               <i class="fas fa-tools me-2 text-warning"></i>-->
+             <!--               System Controls-->
+             <!--           </h3>-->
+             <!--           <span class="chart-period">SUPER ADMIN ONLY</span>-->
+             <!--       </div>-->
+                
+             <!--       <div class="row g-4">-->
+             <!--           <div class="col-md-6">-->
+             <!--               <div class="border rounded-3 p-4 h-100">-->
+             <!--                   <div class="d-flex justify-content-between align-items-start mb-3">-->
+             <!--                       <div>-->
+             <!--                           <h5 class="fw-bold mb-1">Maintenance Mode</h5>-->
+             <!--                           <p class="text-muted small mb-0">-->
+             <!--                               Restrict student and normal user access during updates-->
+             <!--                           </p>-->
+             <!--                       </div>-->
+                
+             <!--                       <div class="form-check form-switch">-->
+             <!--                           <input class="form-check-input" type="checkbox" id="maintenanceModeToggle">-->
+             <!--                       </div>-->
+             <!--                   </div>-->
+                
+             <!--                   <div class="alert alert-warning small mb-3">-->
+             <!--                       <i class="fas fa-exclamation-triangle me-2"></i>-->
+             <!--                       Only admin and super admin accounts will still be able to access the platform while maintenance mode is enabled.-->
+             <!--                   </div>-->
+                
+             <!--                   <label class="form-label fw-semibold">Maintenance Message</label>-->
+             <!--                   <textarea-->
+             <!--                       class="form-control"-->
+             <!--                       id="maintenanceMessage"-->
+             <!--                       rows="4"-->
+             <!--                       placeholder="The system is currently under maintenance. Please try again later."-->
+             <!--                   ></textarea>-->
+             <!--               </div>-->
+             <!--           </div>-->
+                
+             <!--           <div class="col-md-6">-->
+             <!--               <div class="border rounded-3 p-4 h-100">-->
+             <!--                   <div class="d-flex justify-content-between align-items-start mb-3">-->
+             <!--                       <div>-->
+             <!--                           <h5 class="fw-bold mb-1">Site Announcement Banner</h5>-->
+             <!--                           <p class="text-muted small mb-0">-->
+             <!--                               Display a banner message across all pages-->
+             <!--                           </p>-->
+             <!--                       </div>-->
+                
+             <!--                       <div class="form-check form-switch">-->
+             <!--                           <input class="form-check-input" type="checkbox" id="siteBannerToggle">-->
+             <!--                       </div>-->
+             <!--                   </div>-->
+                
+             <!--                   <div class="alert alert-info small mb-3">-->
+             <!--                       <i class="fas fa-bullhorn me-2"></i>-->
+             <!--                       Example: System maintenance on April 10 at 8:00 PM-->
+             <!--                   </div>-->
+                
+             <!--                   <label class="form-label fw-semibold">Banner Message</label>-->
+             <!--                   <textarea-->
+             <!--                       class="form-control"-->
+             <!--                       id="siteBannerMessage"-->
+             <!--                       rows="4"-->
+             <!--                       placeholder="Enter your site-wide announcement..."-->
+             <!--                   ></textarea>-->
+             <!--               </div>-->
+             <!--           </div>-->
+             <!--       </div>-->
+                
+             <!--       <div class="d-flex justify-content-end mt-4">-->
+             <!--           <button class="btn btn-primary px-4" id="saveSystemSettingsBtn">-->
+             <!--               <i class="fas fa-save me-2"></i>-->
+             <!--               Save Settings-->
+             <!--           </button>-->
+             <!--       </div>-->
+             <!--   </div>-->
+             <!--   <?php endif; ?>-->
 
             <!-- Full Leaderboard Modal -->
             <div class="modal fade" id="leaderboardModal" tabindex="-1" aria-labelledby="leaderboardModalLabel" aria-hidden="true">
@@ -794,14 +1197,14 @@ if (!isset($_SESSION['user_id']) || !in_array($role, ['admin', 'super_admin'], t
             <div class="quick-access">
                 <h3 class="section-title">Quick Access</h3>
                 <div class="quick-access-grid">
-                    <?php if ($isSuperAdmin): ?>
                         <a href="Users.php" class="quick-access-card">
                             <div class="icon">
                                 <i class="fas fa-users-cog"></i>
                             </div>
                             <p class="label">User Management</p>
                         </a>
-                    <?php endif; ?>
+                        
+                    <?php if($isAdmin): ?>
                     <a href="Learning_Material.php" class="quick-access-card">
                         <div class="icon">
                             <i class="fas fa-book-open"></i>
@@ -814,6 +1217,7 @@ if (!isset($_SESSION['user_id']) || !in_array($role, ['admin', 'super_admin'], t
                         </div>
                         <p class="label">Practice Exams</p>
                     </a>
+                    <?php endif; ?>
 
                     <?php if ($isSuperAdmin): ?>
                         <a href="Generate_Reports.php" class="quick-access-card">
@@ -823,14 +1227,12 @@ if (!isset($_SESSION['user_id']) || !in_array($role, ['admin', 'super_admin'], t
                             <p class="label">Generate Reports</p>
                         </a>
                     <?php endif; ?>
-                    <?php if ($isSuperAdmin): ?>
                         <a href="Discussion_Forums.php" class="quick-access-card">
                             <div class="icon">
                                 <i class="fas fa-comments"></i>
                             </div>
                             <p class="label">Discussion Forum</p>
                         </a>
-                    <?php endif; ?>
                 </div>
             </div>
         </div>
@@ -1032,12 +1434,12 @@ if (!isset($_SESSION['user_id']) || !in_array($role, ['admin', 'super_admin'], t
             const safeInitials = initials.replace(/"/g, "&quot;");
             return `
           <div class="${cls}" aria-hidden="true" data-initials="${safeInitials}">
-            <img src="${url}" alt="" onerror="
+            <img src="${url}" alt="" style="width:100%;height:100%;object-fit:cover;border-radius:999px;display:block;" onerror="
               try {
                 const host = this.closest('[data-initials]');
                 if (host) { host.textContent = host.dataset.initials || '?'; }
               } catch(e) {}
-            ">
+            "> 
           </div>
         `.trim();
         }
@@ -1322,7 +1724,236 @@ if (!isset($_SESSION['user_id']) || !in_array($role, ['admin', 'super_admin'], t
         }
 
         document.addEventListener("DOMContentLoaded", lbInit);
+        
+        function escapeVisitHtml(value) {
+                const div = document.createElement('div');
+                div.textContent = value ?? '';
+                return div.innerHTML;
+            }
+            
+            function formatVisitNumber(value) {
+                const n = Number(value || 0);
+                try {
+                    return new Intl.NumberFormat().format(n);
+                } catch {
+                    return String(n);
+                }
+            }
+            
+            function formatVisitDate(value) {
+                if (!value) return '—';
+            
+                const date = new Date(String(value).replace(' ', 'T'));
+                if (Number.isNaN(date.getTime())) {
+                    return value;
+                }
+            
+                return date.toLocaleString();
+            }
+            
+            function renderVisitBars(containerId, rows, labelKey, valueKey) {
+                const container = document.getElementById(containerId);
+                if (!container) return;
+            
+                if (!Array.isArray(rows) || rows.length === 0) {
+                    container.innerHTML = '<div class="text-muted">No visit data yet.</div>';
+                    return;
+                }
+            
+                const maxValue = Math.max(...rows.map(row => Number(row[valueKey] || 0)), 1);
+            
+                container.innerHTML = rows.map(row => {
+                    const label = row[labelKey] ?? 'Unknown';
+                    const value = Number(row[valueKey] || 0);
+                    const pct = Math.max(4, Math.min(100, (value / maxValue) * 100));
+            
+                    return `
+                        <div class="${containerId === 'dailyVisits' ? 'visit-daily-row' : 'visit-page-row'}">
+                            <div class="${containerId === 'dailyVisits' ? 'visit-daily-label' : 'visit-page-label'}">
+                                <span>${escapeVisitHtml(label)}</span>
+                                <span>${formatVisitNumber(value)}</span>
+                            </div>
+                            <div class="visit-bar-track">
+                                <div class="visit-bar-fill" style="width:${pct}%"></div>
+                            </div>
+                        </div>
+                    `;
+                }).join('');
+            }
+            
+            function renderRecentVisits(rows) {
+                const tbody = document.getElementById('recentVisitsTable');
+                if (!tbody) return;
+            
+                if (!Array.isArray(rows) || rows.length === 0) {
+                    tbody.innerHTML = `
+                        <tr>
+                            <td colspan="4" class="text-muted">No recent visits yet.</td>
+                        </tr>
+                    `;
+                    return;
+                }
+            
+                tbody.innerHTML = rows.map(row => {
+                    const role = row.role || 'unknown';
+            
+                    return `
+                        <tr>
+                            <td>${escapeVisitHtml(row.name || 'Unknown')}</td>
+                            <td><span class="role-pill ${escapeVisitHtml(role)}">${escapeVisitHtml(role)}</span></td>
+                            <td>${escapeVisitHtml(row.page || 'unknown')}</td>
+                            <td>${escapeVisitHtml(formatVisitDate(row.visited_at))}</td>
+                        </tr>
+                    `;
+                }).join('');
+            }
+            
+            async function loadVisitStats() {
+                const range = document.getElementById('visitRange')?.value || '7d';
+            
+                try {
+                    const res = await fetch(`../partial/visit_stats.php?range=${encodeURIComponent(range)}`, {
+                        cache: 'no-store'
+                    });
+            
+                    const data = await res.json();
+            
+                    if (!data.success) {
+                        throw new Error(data.error || 'Failed to load visit stats.');
+                    }
+            
+                    const summary = data.summary || {};
+            
+                    document.getElementById('visitTotal').textContent = formatVisitNumber(summary.total_visits);
+                    document.getElementById('visitSessions').textContent = formatVisitNumber(summary.unique_sessions);
+                    document.getElementById('visitUsers').textContent = formatVisitNumber(summary.unique_users);
+                    document.getElementById('visitGuests').textContent = formatVisitNumber(summary.guest_visits);
+            
+                    renderVisitBars('visitsByPage', data.by_page || [], 'page', 'visits');
+                    renderVisitBars('dailyVisits', data.daily || [], 'date', 'visits');
+                    renderRecentVisits(data.recent || []);
+                } catch (error) {
+                    console.error(error);
+            
+                    const byPage = document.getElementById('visitsByPage');
+                    const daily = document.getElementById('dailyVisits');
+                    const recent = document.getElementById('recentVisitsTable');
+            
+                    if (byPage) byPage.innerHTML = '<div class="text-danger">Failed to load visit stats.</div>';
+                    if (daily) daily.innerHTML = '<div class="text-danger">Failed to load visit stats.</div>';
+                    if (recent) {
+                        recent.innerHTML = `
+                            <tr>
+                                <td colspan="4" class="text-danger">Failed to load recent visits.</td>
+                            </tr>
+                        `;
+                    }
+                }
+            }
+            
+            document.addEventListener('DOMContentLoaded', () => {
+                loadVisitStats();
+            
+                const range = document.getElementById('visitRange');
+                if (range) {
+                    range.addEventListener('change', loadVisitStats);
+                }
+            });
+        
     </script>
+
+// <script>
+//     const maintenanceModeToggle = document.getElementById('maintenanceModeToggle');
+//     const maintenanceMessage = document.getElementById('maintenanceMessage');
+//     const siteBannerToggle = document.getElementById('siteBannerToggle');
+//     const siteBannerMessage = document.getElementById('siteBannerMessage');
+//     const saveSystemSettingsBtn = document.getElementById('saveSystemSettingsBtn');
+
+//     function showToast(message, success = true) {
+//         const toastEl = document.getElementById('settingsToast');
+//         const toastBody = document.getElementById('settingsToastBody');
+//         if (!toastEl || !toastBody) return;
+
+//         toastBody.textContent = message;
+//         toastEl.className = `toast align-items-center border-0 text-white ${success ? 'bg-success' : 'bg-danger'}`;
+
+//         const toast = bootstrap.Toast.getOrCreateInstance(toastEl, {
+//             delay: 3000
+//         });
+//         toast.show();
+//     }
+
+//     function loadSystemSettings() {
+//         if (!maintenanceModeToggle || !maintenanceMessage || !siteBannerToggle || !siteBannerMessage) return;
+
+//         fetch('../partial/get_system_settings.php')
+//             .then(r => r.json())
+//             .then(data => {
+//                 if (data.status !== 'success') {
+//                     throw new Error(data.message || 'Failed to load settings.');
+//                 }
+
+//                 const settings = data.data || {};
+
+//                 maintenanceModeToggle.checked = Number(settings.maintenance_mode) === 1;
+//                 maintenanceMessage.value = settings.maintenance_message || '';
+//                 siteBannerToggle.checked = Number(settings.site_banner_enabled) === 1;
+//                 siteBannerMessage.value = settings.site_banner_message || '';
+//             })
+//             .catch(err => {
+//                 showToast(err.message || 'Failed to load system settings.', false);
+//             });
+//     }
+
+//     saveSystemSettingsBtn?.addEventListener('click', async () => {
+//         const btn = saveSystemSettingsBtn;
+
+//         const formData = new FormData();
+//         formData.append('maintenance_mode', maintenanceModeToggle?.checked ? '1' : '0');
+//         formData.append('maintenance_message', maintenanceMessage?.value.trim() || '');
+//         formData.append('site_banner_enabled', siteBannerToggle?.checked ? '1' : '0');
+//         formData.append('site_banner_message', siteBannerMessage?.value.trim() || '');
+
+//         try {
+//             btn.disabled = true;
+//             btn.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>Saving...';
+
+//             const response = await fetch('../partial/save_system_settings.php', {
+//                 method: 'POST',
+//                 body: formData
+//             });
+
+//             const result = await response.json();
+
+//             if (!response.ok || result.status !== 'success') {
+//                 throw new Error(result.message || 'Failed to save settings.');
+//             }
+
+//             showToast(result.message || 'System settings saved successfully.', true);
+//             loadSystemSettings();
+//         } catch (error) {
+//             showToast(error.message || 'Failed to save settings.', false);
+//         } finally {
+//             btn.disabled = false;
+//             btn.innerHTML = '<i class="fas fa-save me-2"></i>Save Settings';
+//         }
+//     });
+
+//     document.addEventListener('DOMContentLoaded', function () {
+//         loadSystemSettings();
+//     });
+// </script>
+
+<div class="toast-container position-fixed top-0 end-0 p-3" style="z-index: 9999;">
+    <div id="settingsToast" class="toast align-items-center border-0 text-white bg-success" role="alert" aria-live="assertive" aria-atomic="true">
+        <div class="d-flex">
+            <div id="settingsToastBody" class="toast-body">
+                Settings saved successfully.
+            </div>
+            <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast" aria-label="Close"></button>
+        </div>
+    </div>
+</div>
 
 </body>
 

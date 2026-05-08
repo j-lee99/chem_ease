@@ -1,35 +1,45 @@
 <?php
 session_start();
 
-if (!isset($_SESSION['user_id']) || !isset($_SESSION['role']) || $_SESSION['role'] !== 'user') {
+if (!isset($_SESSION['role']) || !in_array($_SESSION['role'], ['user', 'guest'])) {
     header('Location: ../signin.php');
     exit;
 }
 
 require_once '../partial/db_conn.php';
+require_once '../partial/system_settings_bootstrap.php';
+require_once '../partial/track_visit.php';
 
-$user_id = $_SESSION['user_id'];
+$role = $_SESSION['role'] ?? '';
+$is_guest = ($role === 'guest');
 
-$stmt = $conn->prepare("
-    SELECT full_name, profile_image 
-    FROM users 
-    WHERE id = ? AND is_deleted = 0
-");
-$stmt->bind_param("i", $user_id);
-$stmt->execute();
-$user = $stmt->get_result()->fetch_assoc();
-$stmt->close();
+$user_id = (isset($_SESSION['user_id']) && ctype_digit((string) $_SESSION['user_id']))
+    ? (int) $_SESSION['user_id']
+    : 0;
 
-if (!$user) {
+$user = null;
+if ($user_id > 0) {
+    $stmt = $conn->prepare("
+        SELECT full_name, profile_image
+        FROM users
+        WHERE id = ? AND is_deleted = 0
+    ");
+    $stmt->bind_param("i", $user_id);
+    $stmt->execute();
+    $user = $stmt->get_result()->fetch_assoc();
+    $stmt->close();
+}
+
+if (!$is_guest && !$user) {
     session_destroy();
     header('Location: ../signin.php');
     exit;
 }
 
-$full_name     = $user['full_name'];
+$full_name = $user['full_name'] ?? 'Guest User';
 $profile_image = $user['profile_image'] ?? '';
 
-$_SESSION['full_name']    = $full_name;
+$_SESSION['full_name'] = $full_name;
 $_SESSION['profile_image'] = $profile_image;
 
 $initials = '';
@@ -47,17 +57,117 @@ if (empty($initials)) $initials = 'U';
 $page = $_GET['page'] ?? 'dashboard';
 $valid_pages = ['dashboard', 'study-materials', 'practical-exams', 'analytics', 'forums', 'profile', 'calculator', 'periodic-table'];
 if (!in_array($page, $valid_pages)) $page = 'dashboard';
+$guest_interactive_pages = ['dashboard', 'study-materials', 'practical-exams', 'forums', 'calculator', 'periodic-table'];
+$allow_guest_content = $is_guest && in_array($page, $guest_interactive_pages, true);
 $content_file = $page . '.php';
+
+trackVisit($conn, $page);
+
+$render_page_content = function () use (
+    $content_file,
+    &$conn,
+    &$systemSettings,
+    &$is_guest,
+    &$allow_guest_content,
+    &$user_id,
+    &$user,
+    &$full_name,
+    &$profile_image,
+    &$initials,
+    &$page,
+    &$role
+) {
+    if (file_exists($content_file)) {
+        include $content_file;
+    } else {
+        echo '<p class="text-danger">Page not found!</p>';
+    }
+};
+
+// $render_page_content = function () use ($content_file, $page) {
+//     if (!file_exists($content_file)) {
+//         echo '<div class="alert alert-danger">Page file not found: ' . htmlspecialchars($content_file) . '</div>';
+//         return;
+//     }
+
+//     try {
+//         ob_start();
+//         include $content_file;
+//         $content = ob_get_clean();
+
+//         if (trim($content) === '') {
+//             echo '<div class="alert alert-warning">The page loaded, but it returned no visible content. Check <strong>' . htmlspecialchars($content_file) . '</strong> for empty output or hidden errors.</div>';
+//             return;
+//         }
+
+//         echo $content;
+//     } catch (Throwable $e) {
+//         if (ob_get_level() > 0) {
+//             ob_end_clean();
+//         }
+
+//         echo '<div class="alert alert-danger">';
+//         echo '<strong>Unable to load ' . htmlspecialchars($page) . '.</strong><br>';
+//         echo htmlspecialchars($e->getMessage());
+//         echo '</div>';
+//     }
+// };
 ?>
 <!DOCTYPE html>
 <html lang="en">
 <?php include 'header.php'; ?>
 
 <body>
+    <?php if (!empty($systemSettings['site_banner_enabled']) && !empty($systemSettings['site_banner_message'])): ?>
+        <div class="alert alert-warning text-center mb-0 rounded-0">
+            <i class="fas fa-bullhorn me-2"></i>
+            <?= htmlspecialchars($systemSettings['site_banner_message']) ?>
+        </div>
+    <?php endif; ?>
+    
+    <style>
+        /* Hard fail-safe: a faded loader must never block clicks. */
+        #loader.fade-out,
+        #loader.loader-hidden {
+            opacity: 0 !important;
+            visibility: hidden !important;
+            pointer-events: none !important;
+        }
+    </style>
     <div class="loader" id="loader">
         <img src="../images/logo.png" alt="ChemEase Logo">
         <div class="loader-text">Loading...</div>
     </div>
+    <script>
+        // Keep navigation clickable even if an included PHP page fails or takes too long.
+        (function () {
+            function hideMainLoader() {
+                var loader = document.getElementById('loader');
+                if (!loader) return;
+
+                loader.classList.add('fade-out', 'loader-hidden');
+                loader.style.opacity = '0';
+                loader.style.visibility = 'hidden';
+                loader.style.pointerEvents = 'none';
+
+                setTimeout(function () {
+                    if (loader) loader.style.display = 'none';
+                }, 50);
+            }
+
+            window.hideMainLoader = hideMainLoader;
+
+            if (document.readyState === 'loading') {
+                document.addEventListener('DOMContentLoaded', hideMainLoader, { once: true });
+            } else {
+                hideMainLoader();
+            }
+
+            setTimeout(hideMainLoader, 300);
+            setTimeout(hideMainLoader, 1200);
+            window.addEventListener('load', hideMainLoader, { once: true });
+        })();
+    </script>
 
     <nav class="navbar navbar-expand-lg navbar-light bg-white fixed-top">
         <div class="container-fluid px-3 px-md-4">
@@ -160,26 +270,89 @@ $content_file = $page . '.php';
         </div>
     </div>
 
-    <main class="container" style="margin-top: 90px; padding-bottom: 2rem;">
-        <?php
-        if (file_exists($content_file)) {
-            include $content_file;
-        } else {
-            echo '<p class="text-danger">Page not found!</p>';
+    <style>
+        .guest-preview-wrapper {
+            position: relative;
+            overflow: hidden;
+            max-height: 420px;
+            border-radius: 12px;
+            border: 1px solid #e9ecef;
+            background: #fff;
         }
-        ?>
-    </main>
+
+        .guest-preview-content {
+            filter: blur(6px);
+            pointer-events: none;
+            user-select: none;
+            padding: 1.25rem;
+        }
+
+        .guest-preview-line,
+        .guest-preview-card-row {
+            background: #f1f3f5;
+            border-radius: 8px;
+        }
+
+        .guest-preview-line { height: 14px; margin-bottom: 10px; }
+        .guest-preview-line.w-75 { width: 75%; }
+        .guest-preview-line.w-50 { width: 50%; }
+
+        .guest-preview-card-row {
+            height: 64px;
+            margin-top: 12px;
+        }
+
+        .guest-preview-overlay {
+            position: absolute;
+            inset: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            text-align: center;
+            padding: 1.5rem;
+            background: linear-gradient(to bottom, rgba(255, 255, 255, 0.2), rgba(255, 255, 255, 0.92));
+        }
+
+        .guest-preview-card {
+            background: #fff;
+            border-radius: 10px;
+            padding: 1rem 1.25rem;
+            max-width: 420px;
+        }
+    </style>
 
     <script src="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.0/js/bootstrap.bundle.min.js"></script>
 
+    <main class="container" style="margin-top: 90px; padding-bottom: 2rem;">
+        <?php if ($is_guest && !$allow_guest_content): ?>
+            <div class="guest-preview-wrapper">
+                <div class="guest-preview-content">
+                    <div class="guest-preview-line w-75"></div>
+                    <div class="guest-preview-line"></div>
+                    <div class="guest-preview-line w-50"></div>
+                    <div class="guest-preview-card-row"></div>
+                    <div class="guest-preview-card-row"></div>
+                    <div class="guest-preview-card-row"></div>
+                </div>
+
+                <div class="guest-preview-overlay">
+                    <div class="guest-preview-card shadow-sm">
+                        <h5 class="mb-2">Guest Preview Mode</h5>
+                        <p class="mb-3">Navigation is available, but content is limited in guest mode.</p>
+                        <a href="../signin.php" class="btn btn-primary btn-sm">Sign in for full access</a>
+                    </div>
+                </div>
+            </div>
+        <?php endif; ?>
+        <?php if (!$is_guest || $allow_guest_content): ?>
+            <?php $render_page_content(); ?>
+        <?php endif; ?>
+    </main>
+
     <script>
-        window.addEventListener('load', function() {
-            setTimeout(function() {
-                const loader = document.getElementById('loader');
-                loader.classList.add('fade-out');
-                setTimeout(() => loader.style.display = 'none', 500);
-            }, 1200);
-        });
+        if (typeof window.hideMainLoader === 'function') {
+            window.hideMainLoader();
+        }
     </script>
 </body>
 

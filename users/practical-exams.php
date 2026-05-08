@@ -3,33 +3,311 @@ if (session_status() === PHP_SESSION_NONE) {
     session_start();
 }
 
-if (!isset($_SESSION['user_id']) || !isset($_SESSION['role']) || $_SESSION['role'] !== 'user') {
+require_once '../partial/db_conn.php';
+
+function resolveCurrentUserIdFromSession(): int
+{
+    if (!isset($_SESSION['user_id'])) {
+        return 0;
+    }
+
+    $raw = (string)$_SESSION['user_id'];
+    if (!ctype_digit($raw)) {
+        return 0;
+    }
+
+    $id = (int)$raw;
+    return $id > 0 ? $id : 0;
+}
+
+function buildGuestExamPayload(mysqli $conn, int $examId): ?array
+{
+    if ($examId <= 0) {
+        return null;
+    }
+
+    $stmt = $conn->prepare("SELECT * FROM exams WHERE id = ? LIMIT 1");
+    $stmt->bind_param("i", $examId);
+    $stmt->execute();
+    $exam = $stmt->get_result()->fetch_assoc();
+    $stmt->close();
+
+    if (!$exam) {
+        return null;
+    }
+
+    $stmtQ = $conn->prepare("
+        SELECT
+            q.id,
+            q.question_text,
+            q.type,
+            q.image_path,
+            q.attachment_path,
+            a.id AS answer_id,
+            a.answer_text,
+            a.is_correct
+        FROM exam_questions q
+        LEFT JOIN exam_answers a ON a.question_id = q.id
+        WHERE q.exam_id = ?
+        ORDER BY q.id, a.order_index, a.id
+    ");
+    $stmtQ->bind_param("i", $examId);
+    $stmtQ->execute();
+    $rows = $stmtQ->get_result()->fetch_all(MYSQLI_ASSOC);
+    $stmtQ->close();
+
+    $questions = [];
+    $current = null;
+    foreach ($rows as $row) {
+        if ($current && (int)$current['id'] !== (int)$row['id']) {
+            $questions[] = $current;
+            $current = null;
+        }
+        if (!$current) {
+            $current = [
+                'id' => (int)$row['id'],
+                'text' => $row['question_text'],
+                'type' => $row['type'],
+                'image_path' => $row['image_path'],
+                'attachment_path' => $row['attachment_path'],
+                'choices' => []
+            ];
+        }
+        if (!empty($row['answer_id'])) {
+            $current['choices'][] = [
+                'id' => (int)$row['answer_id'],
+                'text' => $row['answer_text'],
+                'correct' => (bool)$row['is_correct']
+            ];
+        }
+    }
+    if ($current) {
+        $questions[] = $current;
+    }
+
+    $totalQuestions = isset($exam['total_questions']) ? (int)$exam['total_questions'] : 0;
+    if ($totalQuestions <= 0) {
+        $totalQuestions = count($questions);
+    }
+    $exam['total_questions'] = $totalQuestions;
+
+    return [
+        'success' => true,
+        'exam' => $exam,
+        'attempt_id' => 'guest-' . $examId . '-' . time(),
+        'questions' => $questions
+    ];
+}
+
+$role = (string)($_SESSION['role'] ?? '');
+$isGuestUser = ($role === 'guest');
+$user_id = resolveCurrentUserIdFromSession();
+
+if (!in_array($role, ['user', 'guest'], true)) {
     header('Location: ../signin.php');
     exit;
 }
 
-require_once '../partial/db_conn.php';
+if (!$isGuestUser && $user_id <= 0) {
+    header('Location: ../signin.php');
+    exit;
+}
 
-$user_id = $_SESSION['user_id'];
+if (!isset($_SESSION['guest_exam_progress']) || !is_array($_SESSION['guest_exam_progress'])) {
+    $_SESSION['guest_exam_progress'] = [];
+}
+
+if (isset($_GET['guest_exam_action'])) {
+    header('Content-Type: application/json; charset=utf-8');
+    $action = (string)$_GET['guest_exam_action'];
+
+    if ($action === 'get') {
+        echo json_encode([
+            'ok' => true,
+            'data' => $_SESSION['guest_exam_progress']
+        ]);
+        exit;
+    }
+
+    if ($action === 'start') {
+        if (!$isGuestUser) {
+            http_response_code(403);
+            echo json_encode(['ok' => false, 'message' => 'Guest-only action.']);
+            exit;
+        }
+
+        $examId = isset($_GET['exam_id']) ? (int)$_GET['exam_id'] : 0;
+        $payload = buildGuestExamPayload($conn, $examId);
+        if (!$payload) {
+            http_response_code(404);
+            echo json_encode(['ok' => false, 'message' => 'Exam not found.']);
+            exit;
+        }
+
+        $guestExamTitle = (string)($payload['exam']['title'] ?? '');
+        if (!preg_match('/POST TEST\s*\(Module\s+/i', $guestExamTitle)) {
+            http_response_code(403);
+            echo json_encode(['ok' => false, 'message' => 'Guest mode can take module Post Tests only.']);
+            exit;
+        }
+
+        echo json_encode($payload);
+        exit;
+    }
+
+    if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+        http_response_code(405);
+        echo json_encode(['ok' => false, 'message' => 'Method not allowed.']);
+        exit;
+    }
+
+    if ($action === 'save') {
+        if (!$isGuestUser) {
+            echo json_encode(['ok' => true, 'message' => 'Authenticated users store attempts in DB.']);
+            exit;
+        }
+
+        $examId = isset($_POST['exam_id']) ? (int)$_POST['exam_id'] : 0;
+        $title = trim((string)($_POST['title'] ?? ''));
+        $category = trim((string)($_POST['category'] ?? ''));
+        $moduleCode = trim((string)($_POST['module_code'] ?? ''));
+        $score = max(0, min(100, (float)($_POST['score'] ?? 0)));
+        $correct = max(0, (int)($_POST['correct'] ?? 0));
+        $total = max(0, (int)($_POST['total'] ?? 0));
+        $passingScore = max(0, min(100, (float)($_POST['passing_score'] ?? 0)));
+        $timeTaken = trim((string)($_POST['time_taken'] ?? '00:00'));
+
+        if ($examId <= 0) {
+            http_response_code(400);
+            echo json_encode(['ok' => false, 'message' => 'Invalid exam id.']);
+            exit;
+        }
+
+        $stmtGuestExam = $conn->prepare("SELECT title FROM exams WHERE id = ? LIMIT 1");
+        $stmtGuestExam->bind_param('i', $examId);
+        $stmtGuestExam->execute();
+        $guestExamRow = $stmtGuestExam->get_result()->fetch_assoc();
+        $stmtGuestExam->close();
+        if (!$guestExamRow || !preg_match('/POST TEST\s*\(Module\s+/i', (string)$guestExamRow['title'])) {
+            http_response_code(403);
+            echo json_encode(['ok' => false, 'message' => 'Guest mode can save module Post Test attempts only.']);
+            exit;
+        }
+
+        if (!isset($_SESSION['guest_exam_progress']['attempts']) || !is_array($_SESSION['guest_exam_progress']['attempts'])) {
+            $_SESSION['guest_exam_progress']['attempts'] = [];
+        }
+        if (!isset($_SESSION['guest_exam_progress']['history']) || !is_array($_SESSION['guest_exam_progress']['history'])) {
+            $_SESSION['guest_exam_progress']['history'] = [];
+        }
+
+        $key = (string)$examId;
+        $existing = $_SESSION['guest_exam_progress']['attempts'][$key] ?? [];
+        $best = isset($existing['best_score']) ? (float)$existing['best_score'] : null;
+        $bestScore = ($best === null) ? $score : max($best, $score);
+
+        $_SESSION['guest_exam_progress']['attempts'][$key] = [
+            'exam_id' => $examId,
+            'title' => substr($title, 0, 180),
+            'category' => substr($category, 0, 120),
+            'module_code' => substr($moduleCode, 0, 20),
+            'best_score' => round($bestScore, 2),
+            'last_score' => round($score, 2),
+            'correct' => $correct,
+            'total' => $total,
+            'passing_score' => round($passingScore, 2),
+            'time_taken' => substr($timeTaken, 0, 20),
+            'finished_at' => date('Y-m-d H:i:s')
+        ];
+
+        $_SESSION['guest_exam_progress']['history'][] = $_SESSION['guest_exam_progress']['attempts'][$key];
+        if (count($_SESSION['guest_exam_progress']['history']) > 30) {
+            $_SESSION['guest_exam_progress']['history'] = array_slice($_SESSION['guest_exam_progress']['history'], -30);
+        }
+
+        echo json_encode([
+            'ok' => true,
+            'data' => $_SESSION['guest_exam_progress']['attempts'][$key]
+        ]);
+        exit;
+    }
+
+    if ($action === 'sync') {
+        if ($isGuestUser || $user_id <= 0) {
+            echo json_encode(['ok' => false, 'message' => 'Sign in required.']);
+            exit;
+        }
+
+        $attempts = $_SESSION['guest_exam_progress']['attempts'] ?? [];
+        if (!is_array($attempts) || empty($attempts)) {
+            $_SESSION['guest_exam_progress'] = [];
+            echo json_encode(['ok' => true, 'synced' => 0]);
+            exit;
+        }
+
+        $synced = 0;
+        $stmtSync = $conn->prepare("
+            INSERT INTO user_exam_attempts (
+                user_id, exam_id, started_at, finished_at, score, total_correct, total_answered
+            ) VALUES (?, ?, NOW(), NOW(), ?, ?, ?)
+        ");
+
+        if ($stmtSync) {
+            foreach ($attempts as $entry) {
+                $examId = isset($entry['exam_id']) ? (int)$entry['exam_id'] : 0;
+                $score = isset($entry['best_score']) ? (float)$entry['best_score'] : 0.0;
+                $correct = isset($entry['correct']) ? (int)$entry['correct'] : 0;
+                $total = isset($entry['total']) ? (int)$entry['total'] : 0;
+
+                if ($examId <= 0) {
+                    continue;
+                }
+
+                $stmtSync->bind_param("iidii", $user_id, $examId, $score, $correct, $total);
+                if ($stmtSync->execute()) {
+                    $synced++;
+                }
+            }
+            $stmtSync->close();
+        }
+
+        $_SESSION['guest_exam_progress'] = [];
+        echo json_encode(['ok' => true, 'synced' => $synced]);
+        exit;
+    }
+
+    if ($action === 'clear') {
+        $_SESSION['guest_exam_progress'] = [];
+        echo json_encode(['ok' => true]);
+        exit;
+    }
+
+    http_response_code(400);
+    echo json_encode(['ok' => false, 'message' => 'Unknown action.']);
+    exit;
+}
 
 // Always fetch fresh data from DB
-$stmt = $conn->prepare("
-    SELECT full_name, profile_image 
-    FROM users 
-    WHERE id = ? AND is_deleted = 0
-");
-$stmt->bind_param("i", $user_id);
-$stmt->execute();
-$user = $stmt->get_result()->fetch_assoc();
-$stmt->close();
+$user = null;
+if (!$isGuestUser) {
+    $stmt = $conn->prepare("
+        SELECT full_name, profile_image 
+        FROM users 
+        WHERE id = ? AND is_deleted = 0
+    ");
+    $stmt->bind_param("i", $user_id);
+    $stmt->execute();
+    $user = $stmt->get_result()->fetch_assoc();
+    $stmt->close();
+}
 
-if (!$user) {
+if (!$isGuestUser && !$user) {
     session_destroy();
     header('Location: ../signin.php');
     exit;
 }
 
-$full_name     = $user['full_name'];
+$full_name     = $user['full_name'] ?? 'Guest User';
 $profile_image = $user['profile_image'] ?? '';
 
 $_SESSION['full_name']     = $full_name;
@@ -48,12 +326,103 @@ if ($full_name) {
 }
 if (empty($initials)) $initials = 'U';
 
+$hasGuestExamProgress = !empty($_SESSION['guest_exam_progress']['attempts']);
+$guestSelectedStudyModule = isset($_SESSION['guest_selected_study_module']) && is_array($_SESSION['guest_selected_study_module'])
+    ? $_SESSION['guest_selected_study_module']
+    : null;
+
+$preloadedExams = [];
+$sqlExams = "
+    SELECT e.*, COUNT(q.id) AS actual_questions
+    FROM exams e
+    LEFT JOIN exam_questions q ON q.exam_id = e.id
+    GROUP BY e.id
+    ORDER BY e.created_at DESC, e.id DESC
+";
+if ($resExams = $conn->query($sqlExams)) {
+    while ($row = $resExams->fetch_assoc()) {
+        if (!isset($row['total_questions']) || (int)$row['total_questions'] <= 0) {
+            $row['total_questions'] = (int)($row['actual_questions'] ?? 0);
+        }
+        $preloadedExams[] = $row;
+    }
+    $resExams->free();
+}
+
 // Page marker for navbar highlighting
 $page = 'practical-exams';
 ?>
 
 <?php
 $cats = ['Analytical Chemistry', 'Organic Chemistry', 'Physical Chemistry', 'Inorganic Chemistry', 'BioChemistry'];
+
+// Guest practical-exam unlock data.
+// The study-materials page stores guest file progress in browser sessionStorage under `guest_progress`.
+// This metadata lets the browser know which file IDs belong to every study module per category.
+$guestModuleRequirements = [];
+foreach ($cats as $guestCat) {
+    $moduleStmt = $conn->prepare("
+        SELECT id, title, category, module
+        FROM study_materials
+        WHERE category = ?
+        ORDER BY
+          CASE
+            WHEN UPPER(TRIM(module)) REGEXP '^[A-Z]$' THEN ASCII(UPPER(TRIM(module))) - ASCII('A') + 1
+            WHEN TRIM(module) REGEXP '^[0-9]+$' THEN CAST(TRIM(module) AS UNSIGNED)
+            WHEN UPPER(TRIM(module)) = 'I' THEN 1
+            WHEN UPPER(TRIM(module)) = 'II' THEN 2
+            WHEN UPPER(TRIM(module)) = 'III' THEN 3
+            WHEN UPPER(TRIM(module)) = 'IV' THEN 4
+            WHEN UPPER(TRIM(module)) = 'V' THEN 5
+            WHEN UPPER(TRIM(module)) = 'VI' THEN 6
+            WHEN UPPER(TRIM(module)) = 'VII' THEN 7
+            WHEN UPPER(TRIM(module)) = 'VIII' THEN 8
+            WHEN UPPER(TRIM(module)) = 'IX' THEN 9
+            WHEN UPPER(TRIM(module)) = 'X' THEN 10
+            ELSE 999
+          END,
+          id ASC
+    ");
+
+    if (!$moduleStmt) {
+        continue;
+    }
+
+    $moduleStmt->bind_param('s', $guestCat);
+    $moduleStmt->execute();
+    $moduleRes = $moduleStmt->get_result();
+
+    while ($moduleRow = $moduleRes->fetch_assoc()) {
+        $fileIds = [];
+        $filesStmt = $conn->prepare("
+            SELECT id
+            FROM study_material_files
+            WHERE material_id = ?
+            ORDER BY id ASC
+        ");
+
+        if ($filesStmt) {
+            $materialId = (int)$moduleRow['id'];
+            $filesStmt->bind_param('i', $materialId);
+            $filesStmt->execute();
+            $filesRes = $filesStmt->get_result();
+            while ($fileRow = $filesRes->fetch_assoc()) {
+                $fileIds[] = (int)$fileRow['id'];
+            }
+            $filesStmt->close();
+        }
+
+        $guestModuleRequirements[] = [
+            'material_id' => (int)$moduleRow['id'],
+            'title' => $moduleRow['title'] ?? '',
+            'category' => $moduleRow['category'] ?? $guestCat,
+            'module' => $moduleRow['module'] ?? '',
+            'file_ids' => $fileIds,
+        ];
+    }
+
+    $moduleStmt->close();
+}
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -79,7 +448,6 @@ $cats = ['Analytical Chemistry', 'Organic Chemistry', 'Physical Chemistry', 'Ino
 
         body {
             padding-top: 80px;
-
             overflow-x: hidden;
         }
 
@@ -180,7 +548,7 @@ $cats = ['Analytical Chemistry', 'Organic Chemistry', 'Physical Chemistry', 'Ino
             border: 1px solid rgba(23, 162, 184, .08);
             position: relative;
             overflow: hidden;
-            height: 520px;
+            min-height: 520px;
             display: flex;
             flex-direction: column;
         }
@@ -211,7 +579,7 @@ $cats = ['Analytical Chemistry', 'Organic Chemistry', 'Physical Chemistry', 'Ino
             flex: 1;
             display: flex;
             flex-direction: column;
-            height: 100%;
+            min-height: 0;
         }
 
         .exam-header {
@@ -229,6 +597,7 @@ $cats = ['Analytical Chemistry', 'Organic Chemistry', 'Physical Chemistry', 'Ino
             flex-wrap: wrap;
             gap: 0.75rem;
         }
+
         .exam-state {
             display: inline-flex;
             align-items: center;
@@ -239,28 +608,35 @@ $cats = ['Analytical Chemistry', 'Organic Chemistry', 'Physical Chemistry', 'Ino
             font-size: 1rem;
             flex: 0 0 auto;
         }
+
         .exam-state.locked {
-            background: rgba(0,0,0,0.06);
-            color: rgba(0,0,0,0.45);
+            background: rgba(0, 0, 0, 0.06);
+            color: rgba(0, 0, 0, 0.45);
         }
+
         .exam-state.passed {
-            background: rgba(25,135,84,0.12);
+            background: rgba(25, 135, 84, 0.12);
             color: #198754;
         }
+
         .exam-locked {
             opacity: 0.6;
             filter: grayscale(0.6);
-            pointer-events: none; /* disable clicks for locked cards */
+            pointer-events: none;
         }
+
         .exam-locked .start-btn {
-            background: rgba(0,0,0,0.08) !important;
-            color: rgba(0,0,0,0.55) !important;
+            background: rgba(0, 0, 0, 0.08) !important;
+            color: rgba(0, 0, 0, 0.55) !important;
         }
+
         .exam-locked .start-btn i {
             opacity: 0.75;
         }
-        .start-btn.disabled { cursor: not-allowed; }
 
+        .start-btn.disabled {
+            cursor: not-allowed;
+        }
 
         .exam-category-header {
             grid-column: 1 / -1;
@@ -275,7 +651,6 @@ $cats = ['Analytical Chemistry', 'Organic Chemistry', 'Physical Chemistry', 'Ino
             border-radius: 10px;
         }
 
-        /* Hover */
         .exam-category-header:hover {
             background: #eef2f7;
         }
@@ -285,7 +660,6 @@ $cats = ['Analytical Chemistry', 'Organic Chemistry', 'Physical Chemistry', 'Ino
             transition: transform 0.2s ease;
         }
 
-        /* Category grid */
         .exam-grid {
             grid-column: 1 / -1;
             display: grid;
@@ -294,7 +668,6 @@ $cats = ['Analytical Chemistry', 'Organic Chemistry', 'Physical Chemistry', 'Ino
             overflow: hidden;
             transition: all 0.25s ease;
         }
-
 
         .exam-grid.collapse {
             max-height: 0;
@@ -433,7 +806,7 @@ $cats = ['Analytical Chemistry', 'Organic Chemistry', 'Physical Chemistry', 'Ino
 
         .exam-footer {
             margin-top: auto;
-            padding: 1.5rem 2rem 2rem;
+            padding: 1.5rem 2rem 1.75rem;
             background: linear-gradient(135deg, rgba(248, 249, 250, .8), rgba(255, 255, 255, .9));
             border-top: 1px solid rgba(23, 162, 184, .08);
         }
@@ -705,21 +1078,18 @@ $cats = ['Analytical Chemistry', 'Organic Chemistry', 'Physical Chemistry', 'Ino
             border-top-right-radius: 12px;
         }
 
-        /* Responsive Design */
         @media (min-width: 1200px) {
             .exam-card {
                 height: 540px;
             }
         }
 
-        /* Tablets */
         @media (max-width: 992px) {
             #examsGrid {
                 grid-template-columns: repeat(2, 1fr);
             }
         }
 
-        /* Mobile */
         @media (max-width: 576px) {
             #examsGrid {
                 grid-template-columns: 1fr;
@@ -957,7 +1327,7 @@ $cats = ['Analytical Chemistry', 'Organic Chemistry', 'Physical Chemistry', 'Ino
 </head>
 
 <body>
-
+    
     <div class="practice-exams-container">
         <div class="page-header">
             <h1 class="page-title">Practice Exams</h1>
@@ -973,6 +1343,11 @@ $cats = ['Analytical Chemistry', 'Organic Chemistry', 'Physical Chemistry', 'Ino
                 View Exam History <i class="fas fa-arrow-right"></i>
             </a>
         </div>
+        <?php if ($isGuestUser): ?>
+            <div class="alert alert-info text-center mx-auto" style="max-width: 1200px;">
+                Guest mode unlocks each <strong>module Post Test</strong> after you complete its matching study module. Practice Tests, Mock Exams, Full Exams, and other exam types require a full account.
+            </div>
+        <?php endif; ?>
         <div class="topic-tabs">
             <?php foreach ($cats as $i => $cat):
                 $slug = strtolower(str_replace(' ', '-', $cat));
@@ -1015,7 +1390,6 @@ $cats = ['Analytical Chemistry', 'Organic Chemistry', 'Physical Chemistry', 'Ino
         </div>
     </div>
 
-    
     <!-- Locked Content Modal -->
     <div class="modal fade" id="gateModal" tabindex="-1" aria-hidden="true">
         <div class="modal-dialog modal-dialog-centered">
@@ -1035,7 +1409,7 @@ $cats = ['Analytical Chemistry', 'Organic Chemistry', 'Physical Chemistry', 'Ino
         </div>
     </div>
 
-<!-- Exam Modal -->
+    <!-- Exam Modal -->
     <div class="modal fade" id="examModal" tabindex="-1" data-bs-backdrop="static" data-bs-keyboard="false">
         <div class="modal-dialog modal-xl">
             <div class="modal-content">
@@ -1167,6 +1541,12 @@ $cats = ['Analytical Chemistry', 'Organic Chemistry', 'Physical Chemistry', 'Ino
     </div>
 
     <script>
+        const IS_GUEST = <?= $isGuestUser ? 'true' : 'false' ?>;
+        const HAS_GUEST_EXAM_PROGRESS = <?= $hasGuestExamProgress ? 'true' : 'false' ?>;
+        const GUEST_SELECTED_STUDY_MODULE = <?= json_encode($guestSelectedStudyModule, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?>;
+        const PRELOADED_EXAMS = <?= json_encode($preloadedExams, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?>;
+        const GUEST_MODULE_REQUIREMENTS = <?= json_encode($guestModuleRequirements, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?>;
+
         let examData = {};
         let currentQ = 0;
         let timerInterval;
@@ -1178,6 +1558,27 @@ $cats = ['Analytical Chemistry', 'Organic Chemistry', 'Physical Chemistry', 'Ino
         let isGoingToReview = false;
         let originalQuestions = [];
         let questionMapping = [];
+        let guestAllowedExamIds = new Set();
+
+        function buildGuestExamUrl(action) {
+            const u = new URL(window.location.href);
+            u.searchParams.set('guest_exam_action', action);
+            if (!u.searchParams.has('page')) {
+                u.searchParams.set('page', 'practical-exams');
+            }
+            return u.toString();
+        }
+
+        async function syncGuestExamProgressAfterSignup() {
+            if (IS_GUEST || !HAS_GUEST_EXAM_PROGRESS) return;
+            try {
+                await fetch(buildGuestExamUrl('sync'), {
+                    method: 'POST'
+                });
+            } catch (err) {
+                console.error('Failed to sync guest exam progress:', err);
+            }
+        }
 
         function shuffleArray(array) {
             const newArray = [...array];
@@ -1191,7 +1592,7 @@ $cats = ['Analytical Chemistry', 'Organic Chemistry', 'Physical Chemistry', 'Ino
         function showModal(id) {
             new bootstrap.Modal(document.getElementById(id)).show();
         }
-        
+
         const CATEGORIES = [
             'Analytical Chemistry',
             'Organic Chemistry',
@@ -1204,24 +1605,112 @@ $cats = ['Analytical Chemistry', 'Organic Chemistry', 'Physical Chemistry', 'Ino
             return text.toLowerCase().replace(/\s+/g, '-');
         }
 
-        let ALL_EXAMS = [];
-
-        function loadExams() {
-            fetch('../partial/exam_list.php')
-                .then(r => r.json())
-                .then(({
-                    data
-                }) => {
-                    ALL_EXAMS = Array.isArray(data) ? data : [];
-
-                    // auto-load first category
-                    renderExamsByCategory(CATEGORIES[0]);
-                })
-                .catch(err => console.error('Failed to load exams:', err));
+        function getTitleCategoryPrefix(title) {
+            const match = String(title || '').match(
+                /^(.*?)\s*-\s*(?:Practice\s*Test\s*\d+|(?:FULL\s+)?MOCK\s+EXAM|FULL\s+EXAM|POST TEST.*)$/i
+            );
+            return match ? match[1].trim() : null;
         }
 
-        // Cache progress lookups so we don't spam requests while rendering cards
-        const _progressCache = new Map(); 
+        let ALL_EXAMS = [];
+        let EXAM_HISTORY = [];
+        let BEST_SCORE_MAP = new Map();
+
+        function examKey(title, category) {
+            return `${String(title || '').trim().toLowerCase()}||${String(category || '').trim().toLowerCase()}`;
+        }
+
+        async function loadExamHistory() {
+            if (IS_GUEST) {
+                try {
+                    const res = await fetch('../partial/exam_history.php', {
+                        cache: 'no-store'
+                    });
+                    const attempts = await res.json();
+
+                    EXAM_HISTORY = Array.isArray(attempts) ? attempts : [];
+                    BEST_SCORE_MAP.clear();
+                    EXAM_HISTORY.forEach(item => {
+                        const examId = Number(item.exam_id);
+                        const score = Number(item.best_score ?? item.score ?? item.last_score ?? 0);
+                        if (!Number.isFinite(examId) || !Number.isFinite(score)) return;
+                        BEST_SCORE_MAP.set(examId, Math.round(score));
+                    });
+                } catch (err) {
+                    console.error('Failed to load guest exam history:', err);
+                    EXAM_HISTORY = [];
+                    BEST_SCORE_MAP.clear();
+                }
+                return;
+            }
+
+            try {
+                const res = await fetch('../partial/exam_history.php');
+                const data = await res.json();
+
+                EXAM_HISTORY = Array.isArray(data) ? data : [];
+                BEST_SCORE_MAP.clear();
+
+                EXAM_HISTORY.forEach(item => {
+                    const examId = Number(item.exam_id);
+                    const score = Number(item.score);
+
+                    if (!Number.isFinite(examId) || !Number.isFinite(score)) return;
+
+                    const existing = BEST_SCORE_MAP.get(examId);
+                    if (existing === undefined || score > existing) {
+                        BEST_SCORE_MAP.set(examId, Math.round(score));
+                    }
+                });
+            } catch (err) {
+                console.error('Failed to load exam history:', err);
+                EXAM_HISTORY = [];
+                BEST_SCORE_MAP.clear();
+            }
+        }
+
+        function getBestScoreFromHistory(title, category) {
+            const key = examKey(title, category);
+            const score = BEST_SCORE_MAP.get(key);
+
+            if (score === undefined || score === null || Number.isNaN(score)) {
+                return null;
+            }
+
+            return Math.round(score);
+        }
+
+        async function loadExams() {
+            await syncGuestExamProgressAfterSignup();
+            await loadExamHistory();
+
+            if (IS_GUEST) {
+                ALL_EXAMS = Array.isArray(PRELOADED_EXAMS) ? PRELOADED_EXAMS : [];
+                await renderExamsByCategory(CATEGORIES[0]);
+                return;
+            }
+
+            try {
+                const r = await fetch('../partial/exam_list.php');
+                const payload = await r.json();
+                const fromApi = Array.isArray(payload?.data) ? payload.data : (Array.isArray(payload) ? payload : []);
+                ALL_EXAMS = fromApi.length ? fromApi : (Array.isArray(PRELOADED_EXAMS) ? PRELOADED_EXAMS : []);
+                await renderExamsByCategory(CATEGORIES[0]);
+            } catch (err) {
+                console.error('Failed to load exams:', err);
+                ALL_EXAMS = Array.isArray(PRELOADED_EXAMS) ? PRELOADED_EXAMS : [];
+                if (!ALL_EXAMS.length) {
+                    document.getElementById('examsGrid').innerHTML = `
+                        <div class="text-center col-12">
+                            <h4>Failed to load exams.</h4>
+                        </div>`;
+                    return;
+                }
+                await renderExamsByCategory(CATEGORIES[0]);
+            }
+        }
+
+        const _progressCache = new Map();
 
         async function _fetchProgressData(category) {
             const key = norm(category || '');
@@ -1260,7 +1749,7 @@ $cats = ['Analytical Chemistry', 'Organic Chemistry', 'Physical Chemistry', 'Ino
                     return regexes.some(re => re.test(t));
                 });
 
-                if (matched.length === 0) return true; // if can't find module keep locked
+                if (matched.length === 0) return true;
 
                 const isComplete = (row) => {
                     const files = Array.isArray(row?.files) ? row.files : [];
@@ -1268,28 +1757,19 @@ $cats = ['Analytical Chemistry', 'Organic Chemistry', 'Physical Chemistry', 'Ino
                         return files.every(f => toPercentNumber(f?.progress) >= 100);
                     }
 
-                    // Fallback to module-level percent fields
                     const p = toPercentNumber(row?.progress ?? row?.completion ?? row?.percent ?? row?.percentage);
                     return p >= 100;
                 };
 
-                // Unlock if ANY matched module is complete
                 return !matched.some(isComplete);
             } catch (e) {
-                // If we can't check, default to locked for safety
                 return true;
             }
         }
 
-        
         function _computeBestGrade(exam) {
-            const raw = (exam?.best_score !== undefined && exam?.best_score !== null && exam?.best_score !== '') ?
-                Number(exam.best_score) :
-                ((exam?.user_score !== undefined && exam?.user_score !== null && exam?.user_score !== '') ?
-                    Number(exam.user_score) :
-                    null);
-            if (raw === null || Number.isNaN(raw) || raw <= 0) return null;
-            return Math.round(raw);
+            const score = BEST_SCORE_MAP.get(Number(exam?.id));
+            return Number.isFinite(score) ? Math.round(score) : null;
         }
 
         function _computePassingGrade(exam) {
@@ -1300,47 +1780,201 @@ $cats = ['Analytical Chemistry', 'Organic Chemistry', 'Physical Chemistry', 'Ino
             return Math.round(raw);
         }
 
-async function renderExamsByCategory(category) {
+        function isPracticeTestTitle(title) {
+            return /Practice\s*Test\s*\d+/i.test(String(title || ''));
+        }
+
+        function getPracticeTestNumber(title) {
+            const match = String(title || '').match(/Practice\s*Test\s*(\d+)/i);
+            return match ? parseInt(match[1], 10) : null;
+        }
+
+        function isMockTestTitle(title) {
+            return /MOCK\s+EXAM/i.test(String(title || ''));
+        }
+
+        function isFullExamTitle(title) {
+            return /FULL\s+EXAM/i.test(String(title || ''));
+        }
+
+        function isUnlockableExamType(title) {
+            return isPostTestTitle(title) || isPracticeTestTitle(title) || isMockTestTitle(title);
+        }
+
+        function normalizeGuestModuleCode(code) {
+            return String(code || '').trim().toUpperCase();
+        }
+
+        function getGuestStudyProgressFromBrowser() {
+            try {
+                return JSON.parse(sessionStorage.getItem('guest_progress') || '{}') || {};
+            } catch (e) {
+                return {};
+            }
+        }
+
+        function getGuestModuleRequirement(category, moduleCode) {
+            const wantedCat = norm(category || '');
+            const variants = moduleCodeVariants(moduleCode).map(v => normalizeGuestModuleCode(v));
+            const wantedDirect = normalizeGuestModuleCode(moduleCode);
+            if (wantedDirect && !variants.includes(wantedDirect)) variants.push(wantedDirect);
+
+            if (!wantedCat || !variants.length) return null;
+
+            return (Array.isArray(GUEST_MODULE_REQUIREMENTS) ? GUEST_MODULE_REQUIREMENTS : [])
+                .find(item => {
+                    if (norm(item?.category || '') !== wantedCat) return false;
+                    const itemModule = normalizeGuestModuleCode(item?.module || '');
+                    return variants.includes(itemModule);
+                }) || null;
+        }
+
+        function isGuestModuleStudyComplete(category, moduleCode) {
+            if (!IS_GUEST) return true;
+
+            const requirement = getGuestModuleRequirement(category, moduleCode);
+            if (!requirement) return false;
+
+            const fileIds = Array.isArray(requirement.file_ids)
+                ? requirement.file_ids.map(id => String(id))
+                : [];
+
+            if (!fileIds.length) return false;
+
+            const progressMap = getGuestStudyProgressFromBrowser();
+            return fileIds.every(fileId => toPercentNumber(progressMap[fileId]) >= 100);
+        }
+
+        function getGuestExamLockReason(exam, category) {
+            if (!IS_GUEST) return null;
+
+            if (!isPostTestTitle(exam?.title)) {
+                return 'full_account_required';
+            }
+
+            const moduleCode = getModuleCodeFromPostTestTitle(exam?.title);
+            if (!moduleCode) return 'missing_module';
+
+            if (!isGuestModuleStudyComplete(category || exam?.category, moduleCode)) {
+                return 'module_incomplete';
+            }
+
+            return null;
+        }
+
+        function resolveGuestAllowedExamIds(exams, category) {
+            const allowed = new Set();
+            if (!IS_GUEST) return allowed;
+
+            // Guest unlock rule: a module POST TEST is unlocked only when its corresponding
+            // study module files are all completed in guest sessionStorage progress.
+            exams.forEach(e => {
+                if (getGuestExamLockReason(e, category) === null) {
+                    allowed.add(Number(e.id));
+                }
+            });
+
+            return allowed;
+        }
+
+        function isGuestAllowedExam(examId) {
+            if (!IS_GUEST) return true;
+            return guestAllowedExamIds instanceof Set && guestAllowedExamIds.has(Number(examId));
+        }
+
+        function isExamPassed(exam) {
+            const best = _computeBestGrade(exam);
+            const passing = _computePassingGrade(exam);
+
+            if (best === null || passing === null) return false;
+            return best >= passing;
+        }
+
+        async function renderExamsByCategory(category) {
             const grid = document.getElementById('examsGrid');
             grid.innerHTML = '';
 
-            const exams = ALL_EXAMS.filter(e => e.category === category);
+            const exams = ALL_EXAMS.filter(e => {
+                const dbCategory = String(e.category || '').trim();
+                const titleCategory = getTitleCategoryPrefix(e.title);
+
+                if (titleCategory) {
+                    return dbCategory === category && titleCategory === category;
+                }
+
+                return dbCategory === category;
+            });
 
             if (!exams.length) {
                 grid.innerHTML = `
-            <div class="text-center col-12">
-                <h4>No exams available for this category.</h4>
-            </div>`;
+                    <div class="text-center col-12">
+                        <h4>No exams available for this category.</h4>
+                    </div>`;
+                document.getElementById('userAvg').textContent = '—';
                 return;
             }
 
             let totalScore = 0;
             let totalAttempts = 0;
+            guestAllowedExamIds = resolveGuestAllowedExamIds(exams, category);
 
-            // Pre-calc locked status (this only affects POST TEST exams)
-            const lockedMap = new Map();
-            await Promise.all(exams.map(async (e) => {
-                const locked = await _isPostTestLocked(e.title, category);
-                lockedMap.set(e.id, locked);
-            }));
+            const postTestLockedMap = new Map();
+            if (IS_GUEST) {
+                exams.forEach(e => postTestLockedMap.set(e.id, false));
+            } else {
+                await Promise.all(exams.map(async (e) => {
+                    const locked = await _isPostTestLocked(e.title, category);
+                    postTestLockedMap.set(e.id, locked);
+                }));
+            }
 
-            
-            // Gate: Non-POST TEST exams stay locked until ALL POST TESTs in this category are PASSED.
-            //  If a POST TEST is still locked (module not 100%), we consider it not passed.
-            //  If there are no POST TESTs in this category, we don't gate anything.
-            const postTestsInCategory = exams.filter(x => isPostTestTitle(x.title));
-            const allPostTestsPassedInCategory = postTestsInCategory.length === 0 ? true : postTestsInCategory.every(x => {
-                const locked = !!lockedMap.get(x.id);
-                if (locked) return false;
+            const postTests = exams.filter(e => isPostTestTitle(e.title));
+            const practiceTests = exams
+                .filter(e => isPracticeTestTitle(e.title))
+                .sort((a, b) => (getPracticeTestNumber(a.title) || 0) - (getPracticeTestNumber(b.title) || 0));
 
-                const best = _computeBestGrade(x);
-                const passing = _computePassingGrade(x);
+            const allPostTestsPassed = postTests.length === 0
+                ? true
+                : postTests.every(e => {
+                    const locked = !!postTestLockedMap.get(e.id);
+                    if (locked) return false;
+                    return isExamPassed(e);
+                });
 
-                if (best === null || passing === null) return false;
-                return best >= passing;
+            const practiceLockedMap = new Map();
+
+            for (let i = 0; i < practiceTests.length; i++) {
+                const exam = practiceTests[i];
+                const number = getPracticeTestNumber(exam.title);
+
+                let locked = true;
+
+                if (number === 1) {
+                    locked = !allPostTestsPassed;
+                } else {
+                    const prevExam = practiceTests.find(p => getPracticeTestNumber(p.title) === number - 1);
+                    locked = !prevExam || !isExamPassed(prevExam);
+                }
+
+                practiceLockedMap.set(exam.id, locked);
+            }
+
+            const prerequisiteExams = exams.filter(e => isPostTestTitle(e.title) || isPracticeTestTitle(e.title));
+            const allPrerequisiteExamsPassed = prerequisiteExams.length > 0 && prerequisiteExams.every(e => {
+                if (isPostTestTitle(e.title)) {
+                    if (postTestLockedMap.get(e.id)) return false;
+                    return isExamPassed(e);
+                }
+
+                if (isPracticeTestTitle(e.title)) {
+                    if (practiceLockedMap.get(e.id)) return false;
+                    return isExamPassed(e);
+                }
+
+                return false;
             });
 
-const fragment = document.createDocumentFragment();
+            const fragment = document.createDocumentFragment();
 
             for (const e of exams) {
                 const difficulty = (e.difficulty || 'Beginner');
@@ -1355,8 +1989,7 @@ const fragment = document.createDocumentFragment();
                 const safeTitle = escapeAttr(e.title);
                 const safeDesc = escapeAttr(e.description || '');
                 const safeTopic = escapeAttr(e.topic || 'Not specified');
-                const totalItems = e.total_questions || e.actual_questions;
-
+                const totalItems = e.total_questions !== undefined && e.total_questions !== null && e.total_questions !== '' ? Number(e.total_questions) : 0;
                 const passingGrade = _computePassingGrade(e);
                 const bestGrade = _computeBestGrade(e);
                 const hasAttempt = (bestGrade !== null);
@@ -1367,21 +2000,54 @@ const fragment = document.createDocumentFragment();
                 }
 
                 const isPostTest = isPostTestTitle(e.title);
-                const lockedByPostTestRule = isPostTest ? !!lockedMap.get(e.id) : false;
-                const lockedByGateRule = (!isPostTest && !allPostTestsPassedInCategory);
-                const isLocked = lockedByPostTestRule || lockedByGateRule;
+                const isPractice = isPracticeTestTitle(e.title);
+                const isMock = isMockTestTitle(e.title);
+                const isFullExam = isFullExamTitle(e.title);
+
+                let isLocked = true;
+                if (IS_GUEST) {
+                    isLocked = !isGuestAllowedExam(e.id);
+                } else {
+                    if (isPostTest) {
+                        isLocked = !!postTestLockedMap.get(e.id);
+                    } else if (isPractice) {
+                        isLocked = !!practiceLockedMap.get(e.id);
+                    } else if (isMock) {
+                        isLocked = !allPrerequisiteExamsPassed;
+                    }
+                }
 
                 const isPassed = (!isLocked && bestGrade !== null && passingGrade !== null && bestGrade >= passingGrade);
 
-                examMetaMap.set(e.id, { title: e.title, category, moduleCode: getModuleCodeFromPostTestTitle(e.title) });
+                examMetaMap.set(e.id, {
+                    title: e.title,
+                    category,
+                    moduleCode: getModuleCodeFromPostTestTitle(e.title),
+                    practiceNo: getPracticeTestNumber(e.title),
+                    isPostTest,
+                    isPractice,
+                    isMock,
+                    isFullExam
+                });
 
                 const div = document.createElement('div');
                 div.className = 'exam-card' + (isLocked ? ' exam-locked' : '') + (isPassed ? ' exam-passed' : '');
                 div.style.cursor = isLocked ? 'not-allowed' : 'pointer';
 
                 div.onclick = () => {
-                    if (isLocked) return; // locked cards should not open details/modal
-                    openDetailsModal(e.id, safeTitle, safeDesc, difficulty, totalItems, e.duration_minutes, passingGrade, safeTopic, bestGrade, category);
+                    if (isLocked) return;
+                    openDetailsModal(
+                        e.id,
+                        safeTitle,
+                        safeDesc,
+                        difficulty,
+                        totalItems,
+                        e.duration_minutes,
+                        passingGrade,
+                        safeTopic,
+                        bestGrade,
+                        category
+                    );
                 };
 
                 const stateIconHtml = isLocked
@@ -1390,45 +2056,46 @@ const fragment = document.createDocumentFragment();
                         ? `<span class="exam-state passed" title="Passed"><i class="fas fa-check-circle"></i></span>`
                         : '');
 
+                const guestLockReason = IS_GUEST ? getGuestExamLockReason(e, category) : null;
                 const startBtnHtml = isLocked
-                    ? `Locked <i class="fas fa-lock"></i>`
-                    : `${bestGrade !== null ? 'Retake' : 'Take'} Exam <i class="fas fa-play"></i>`;
+                    ? `${guestLockReason === 'module_incomplete' ? 'Complete Module First' : 'Locked'} <i class="fas fa-lock"></i>`
+                    : `${IS_GUEST ? 'Take Guest Exam' : (bestGrade !== null ? 'Retake' : 'Take')} <i class="fas fa-play"></i>`;
 
                 div.innerHTML = `
-            <div class="exam-card-content">
-                <div class="exam-header">
-                    <h3 class="exam-title"><span class="exam-title-text">${e.title}</span>${stateIconHtml}</h3>
-                    <span class="difficulty-badge ${badge}">${difficulty}</span>
-                </div>
-                <p class="exam-description">${shortDesc}</p>
-                <div class="exam-stats">
-                    <div class="stat-item">
-                        <i class="fas fa-question-circle stat-icon"></i>
-                        <span>${totalItems} Questions</span>
+                    <div class="exam-card-content">
+                        <div class="exam-header">
+                            <h3 class="exam-title"><span class="exam-title-text">${e.title}</span>${stateIconHtml}</h3>
+                            <span class="difficulty-badge ${badge}">${difficulty}</span>
+                        </div>
+                        <p class="exam-description">${shortDesc}</p>
+                        <div class="exam-stats">
+                            <div class="stat-item">
+                                <i class="fas fa-question-circle stat-icon"></i>
+                                <span>${totalItems} Questions</span>
+                            </div>
+                            <div class="stat-item">
+                                <i class="fas fa-clock stat-icon"></i>
+                                <span>${e.duration_minutes} Minutes</span>
+                            </div>
+                        </div>
                     </div>
-                    <div class="stat-item">
-                        <i class="fas fa-clock stat-icon"></i>
-                        <span>${e.duration_minutes} Minutes</span>
+                    <div class="exam-footer">
+                        <div class="start-btn${isLocked ? ' disabled' : ''}">
+                            ${startBtnHtml}
+                        </div>
+                        ${
+                            (!isLocked && bestGrade !== null)
+                                ? `<small class="d-block text-center ${isPassed ? 'text-success' : 'text-muted'} mt-2">
+                                    Your best: ${bestGrade}%${isPassed ? ' ✓' : ''}
+                                  </small>`
+                                : ''
+                        }
                     </div>
-                </div>
-            </div>
-            <div class="exam-footer">
-                <div class="start-btn${isLocked ? ' disabled' : ''}">
-                    ${startBtnHtml}
-                </div>
-                ${
-                    (!isLocked && bestGrade !== null)
-                        ? `<small class="d-block text-center ${isPassed ? 'text-success' : 'text-muted'} mt-2">
-                            Your best: ${bestGrade}%${isPassed ? ' ✓' : ''}
-                          </small>`
-                        : ''
-                }
-            </div>
-        `;
+                `;
 
                 div.querySelector('.start-btn').onclick = ev => {
                     ev.stopPropagation();
-                    if (isLocked) return; // locked cards/buttons should not open any modal
+                    if (isLocked) return;
                     div.onclick();
                 };
 
@@ -1440,10 +2107,6 @@ const fragment = document.createDocumentFragment();
             document.getElementById('userAvg').textContent =
                 totalAttempts ? (totalScore / totalAttempts).toFixed(2) + '%' : '—';
         }
-
-
-        /* ---------- Helpers ---------- */
-
         function escapeAttr(str) {
             return String(str)
                 .replace(/\\/g, '\\\\')
@@ -1453,12 +2116,9 @@ const fragment = document.createDocumentFragment();
                 .replace(/\r/g, '');
         }
 
-
-
-        // ---- locked content helpers ----
-        let currentExamMeta = null; // { id, title, category, moduleCode }
-        const examMetaMap = new Map(); // examId -> { title, category, moduleCode }
-        let gateTarget = null;      // { category, moduleCode }
+        let currentExamMeta = null; // { id, title, category, moduleCode, practiceNo, isPostTest, isPractice, isMock, isFullExam }
+        const examMetaMap = new Map(); // examId -> richer exam metadata
+        let gateTarget = null;
 
         function showGate(message, target) {
             const el = document.getElementById('gateModalMessage');
@@ -1486,7 +2146,6 @@ const fragment = document.createDocumentFragment();
             return String(str || '').trim().toLowerCase().replace(/\s+/g, ' ');
         }
 
-        // Convert values like "100", "100.00", "100%" into a number (NaN-safe)
         function toPercentNumber(val) {
             if (val === null || val === undefined) return Number.NaN;
             if (typeof val === 'string') {
@@ -1533,24 +2192,20 @@ const fragment = document.createDocumentFragment();
             return out;
         }
 
-        // Returns multiple acceptable codes for matching a module title.
-        // Examples: "A" -> ["A","I"], "B" -> ["B","II"], "II" -> ["II","B"]
         function moduleCodeVariants(code) {
             const c = String(code || '').trim();
             if (!c) return [];
 
             const set = new Set([c]);
 
-            // Letter -> roman (A=I, B=II, C=III...)
             if (/^[A-Z]$/i.test(c)) {
-                const n = c.toUpperCase().charCodeAt(0) - 64; // A=1
+                const n = c.toUpperCase().charCodeAt(0) - 64;
                 if (n >= 1 && n <= 26) {
                     const roman = intToRoman(n);
                     if (roman) set.add(roman);
                 }
             }
 
-            // Roman -> letter
             if (/^[IVXLCDM]+$/i.test(c)) {
                 const n = romanToInt(c);
                 if (n >= 1 && n <= 26) {
@@ -1561,12 +2216,11 @@ const fragment = document.createDocumentFragment();
             return Array.from(set);
         }
 
-
         async function isModuleProgressComplete(moduleCode, category) {
             if (!moduleCode) return false;
 
             const wantedCode = String(moduleCode || '').trim();
-            const wantedCat  = norm(category || '');
+            const wantedCat = norm(category || '');
 
             const url = wantedCat
                 ? `../partial/get_progress.php?category=${encodeURIComponent(category)}`
@@ -1586,7 +2240,6 @@ const fragment = document.createDocumentFragment();
                         if (modCat !== wantedCat) return false;
                     }
 
-                    // Match by module code in title
                     const title = String(mod?.title || '');
                     return reStart.test(title) || reAnywhere.test(title);
                 });
@@ -1612,7 +2265,7 @@ const fragment = document.createDocumentFragment();
 
             try {
                 sessionStorage.setItem('chemEase_open_module', JSON.stringify(gateTarget));
-            } catch (e) {}
+            } catch (e) { }
 
             window.location.href = 'index?page=study-materials';
         });
@@ -1626,8 +2279,8 @@ const fragment = document.createDocumentFragment();
             document.getElementById('detailsDuration').textContent = duration;
             document.getElementById('detailsPassingScore').textContent =
                 (passingScore !== null && passingScore !== undefined && passingScore !== 'null') ?
-                `${passingScore}%` :
-                '—';
+                    `${passingScore}%` :
+                    '—';
 
             if (bestScore !== null && bestScore !== 'null' && bestScore !== 'undefined' && bestScore !== 0 && bestScore !== '0') {
                 document.getElementById('detailsBestScore').textContent = `${bestScore}%`;
@@ -1639,7 +2292,18 @@ const fragment = document.createDocumentFragment();
             }
 
             currentExamIdForStart = id;
-            currentExamMeta = { id, title, category, moduleCode: getModuleCodeFromPostTestTitle(title) };
+            currentExamMeta = {
+                id,
+                title,
+                category,
+                moduleCode: getModuleCodeFromPostTestTitle(title),
+                practiceNo: getPracticeTestNumber(title),
+                isPostTest: isPostTestTitle(title),
+                isPractice: isPracticeTestTitle(title),
+                isMock: isMockTestTitle(title),
+                isFullExam: isFullExamTitle(title)
+            };
+
             showModal('detailsModal');
         }
 
@@ -1651,79 +2315,236 @@ const fragment = document.createDocumentFragment();
 
         async function redirectToExam(examId) {
             if (!examId) {
-                console.log(currentExamIdForStart)
                 alert("Invalid exam.");
                 return;
             }
 
-
-            // Content lock check happens HERE (when user clicks Take/Start Exam)
             const meta = (currentExamMeta && currentExamMeta.id === examId)
                 ? currentExamMeta
                 : (examMetaMap.get(examId) || null);
 
-            if (meta && isPostTestTitle(meta.title)) {
-                const category = meta.category;
-                const moduleCode = meta.moduleCode || getModuleCodeFromPostTestTitle(meta.title);
-                const ok = await isModuleProgressComplete(moduleCode, category);
-                if (!ok) {
+            const exam = ALL_EXAMS.find(e => Number(e.id) === Number(examId));
+            if (!exam || !meta) {
+                alert("Exam metadata not found.");
+                return;
+            }
+
+            const category = meta.category || exam.category;
+            const exams = ALL_EXAMS.filter(e => {
+                const dbCategory = String(e.category || '').trim();
+                const titleCategory = getTitleCategoryPrefix(e.title);
+
+                if (titleCategory) {
+                    return dbCategory === category && titleCategory === category;
+                }
+
+                return dbCategory === category;
+            });
+
+            if (IS_GUEST) {
+                guestAllowedExamIds = resolveGuestAllowedExamIds(exams, category);
+                const lockReason = getGuestExamLockReason(exam, category);
+
+                if (lockReason === 'full_account_required') {
                     showGate(
-                        "Locked content. You may have failed or haven't taken the previous exam, or you haven't finished the previous module/lesson yet.",
+                        "Guest mode can take module Post Tests only. Practice Tests, Mock Exams, Full Exams, and other exam types require a full account.",
+                        { category }
+                    );
+                    return;
+                }
+
+                if (lockReason === 'module_incomplete') {
+                    showGate(
+                        "This Post Test is locked. Complete the matching study module first, then come back to take the exam.",
+                        {
+                            category,
+                            moduleCode: getModuleCodeFromPostTestTitle(exam.title)
+                        }
+                    );
+                    return;
+                }
+
+                if (lockReason !== null || !isGuestAllowedExam(exam.id)) {
+                    showGate(
+                        "This exam is still locked in guest mode.",
+                        { category }
+                    );
+                    return;
+                }
+
+                startExam(examId);
+                return;
+            }
+
+            const postTestLockedMap = new Map();
+            await Promise.all(exams.map(async (e) => {
+                const locked = await _isPostTestLocked(e.title, category);
+                postTestLockedMap.set(e.id, locked);
+            }));
+
+            const postTests = exams.filter(e => isPostTestTitle(e.title));
+            const practiceTests = exams
+                .filter(e => isPracticeTestTitle(e.title))
+                .sort((a, b) => (getPracticeTestNumber(a.title) || 0) - (getPracticeTestNumber(b.title) || 0));
+
+            const allPostTestsPassed = postTests.length === 0
+                ? true
+                : postTests.every(e => {
+                    const locked = !!postTestLockedMap.get(e.id);
+                    if (locked) return false;
+                    return isExamPassed(e);
+                });
+
+            const practiceLockedMap = new Map();
+
+            for (let i = 0; i < practiceTests.length; i++) {
+                const item = practiceTests[i];
+                const number = getPracticeTestNumber(item.title);
+
+                let locked = true;
+
+                if (number === 1) {
+                    locked = !allPostTestsPassed;
+                } else {
+                    const prevExam = practiceTests.find(p => getPracticeTestNumber(p.title) === number - 1);
+                    locked = !prevExam || !isExamPassed(prevExam);
+                }
+
+                practiceLockedMap.set(item.id, locked);
+            }
+
+            const prerequisiteExams = exams.filter(e => isPostTestTitle(e.title) || isPracticeTestTitle(e.title));
+            const allPrerequisiteExamsPassed = prerequisiteExams.length > 0 && prerequisiteExams.every(e => {
+                if (isPostTestTitle(e.title)) {
+                    if (postTestLockedMap.get(e.id)) return false;
+                    return isExamPassed(e);
+                }
+
+                if (isPracticeTestTitle(e.title)) {
+                    if (practiceLockedMap.get(e.id)) return false;
+                    return isExamPassed(e);
+                }
+
+                return false;
+            });
+
+            if (isPostTestTitle(exam.title)) {
+                if (postTestLockedMap.get(exam.id)) {
+                    const moduleCode = getModuleCodeFromPostTestTitle(exam.title);
+                    showGate(
+                        "Locked content. You must finish the required module or lesson first before taking this post test.",
                         { category, moduleCode }
                     );
                     return;
                 }
+
+                if (IS_GUEST) {
+                    startExam(examId);
+                } else {
+                    window.location.href = `take-exam.php?exam_id=${examId}`;
+                }
+                return;
             }
 
-            window.location.href = `take-exam.php?exam_id=${examId}`;
+            if (isPracticeTestTitle(exam.title)) {
+                if (practiceLockedMap.get(exam.id)) {
+                    showGate(
+                        "This practice test is still locked. Pass all post tests first, then pass the previous practice test in order.",
+                        { category }
+                    );
+                    return;
+                }
+
+                if (IS_GUEST) {
+                    startExam(examId);
+                } else {
+                    window.location.href = `take-exam.php?exam_id=${examId}`;
+                }
+                return;
+            }
+
+            if (isMockTestTitle(exam.title)) {
+                if (!allPrerequisiteExamsPassed) {
+                    showGate(
+                        "This mock exam is locked. Pass all required post tests and practice tests in this category first before taking the mock exam.",
+                        { category }
+                    );
+                    return;
+                }
+
+                if (IS_GUEST) {
+                    startExam(examId);
+                } else {
+                    window.location.href = `take-exam.php?exam_id=${examId}`;
+                }
+                return;
+            }
+
+            showGate(
+                "This exam is locked. Only POST TEST, Practice Test, and Mock Exam types can be unlocked here.",
+                { category }
+            );
+        }
+        function initExamSessionFromPayload(data) {
+            if (!data || !data.exam || !Array.isArray(data.questions)) {
+                showError('Exam not found');
+                return;
+            }
+
+            originalQuestions = data.questions;
+
+            const shuffledQuestions = shuffleArray(data.questions);
+            questionMapping = shuffledQuestions.map(q => {
+                const originalIndex = originalQuestions.findIndex(oq => oq.id === q.id);
+                return {
+                    shuffledQuestion: {
+                        ...q,
+                        choices: shuffleArray(q.choices)
+                    },
+                    originalIndex: originalIndex
+                };
+            });
+
+            examData = {
+                ...data,
+                questions: questionMapping.map(qm => qm.shuffledQuestion)
+            };
+
+            currentQ = 0;
+            examEnded = false;
+            isGoingToReview = false;
+            responses = Array(examData.questions.length).fill(null);
+
+            document.getElementById('examTitle').textContent = data.exam.title;
+            document.getElementById('qTotal').textContent = examData.exam.total_questions;
+
+            startTime = Date.now();
+            startTimer((Number(data.exam.duration_minutes) || 0) * 60);
+            showQuestion();
+
+            examModalInstance = bootstrap.Modal.getInstance(document.getElementById('examModal')) ||
+                new bootstrap.Modal(document.getElementById('examModal'), {
+                    backdrop: 'static',
+                    keyboard: false
+                });
+            examModalInstance.show();
         }
 
-
         function startExam(examId) {
-            fetch(`../partial/exam_start.php?exam_id=${examId}`)
-                .then(r => r.json())
+            const url = `../partial/exam_start.php?exam_id=${encodeURIComponent(examId)}`;
+
+            fetch(url, { cache: 'no-store' })
+                .then(async r => {
+                    const data = await r.json().catch(() => null);
+                    if (!r.ok || !data || data.success === false) {
+                        throw new Error(data?.error || data?.message || 'Unable to start exam.');
+                    }
+                    return data;
+                })
                 .then(data => {
-                    if (!data.exam) return showError('Exam not found');
-
-                    originalQuestions = data.questions;
-
-                    const shuffledQuestions = shuffleArray(data.questions);
-
-                    questionMapping = shuffledQuestions.map(q => {
-                        const originalIndex = originalQuestions.findIndex(oq => oq.id === q.id);
-                        return {
-                            shuffledQuestion: {
-                                ...q,
-                                choices: shuffleArray(q.choices)
-                            },
-                            originalIndex: originalIndex
-                        };
-                    });
-
-                    examData = {
-                        ...data,
-                        questions: questionMapping.map(qm => qm.shuffledQuestion)
-                    };
-
-                    currentQ = 0;
-                    examEnded = false;
-                    isGoingToReview = false;
-                    responses = Array(examData.questions.length).fill(null);
-
-                    document.getElementById('examTitle').textContent = data.exam.title;
-                    document.getElementById('qTotal').textContent = examData.questions.length;
-
-                    startTime = Date.now();
-                    startTimer(data.exam.duration_minutes * 60);
-                    showQuestion();
-
-                    examModalInstance = bootstrap.Modal.getInstance(document.getElementById('examModal')) ||
-                        new bootstrap.Modal(document.getElementById('examModal'), {
-                            backdrop: 'static',
-                            keyboard: false
-                        });
-                    examModalInstance.show();
-                });
+                    initExamSessionFromPayload(data);
+                })
+                .catch(err => showError(err.message || 'Unable to start exam. Please try again.'));
         }
 
         function startTimer(seconds) {
@@ -1832,6 +2653,37 @@ const fragment = document.createDocumentFragment();
             const timeTaken = Math.floor((Date.now() - startTime) / 1000);
             const minutes = String(Math.floor(timeTaken / 60)).padStart(2, '0');
             const seconds = String(timeTaken % 60).padStart(2, '0');
+            const timeLabel = minutes + ':' + seconds;
+
+            if (IS_GUEST) {
+                const payload = {
+                    attempt_id: examData.attempt_id,
+                    responses: examData.questions.map((q, i) => ({
+                        question_id: q.id,
+                        answer_id: responses[i] || null
+                    }))
+                };
+
+                fetch('../partial/exam_submit.php', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(payload)
+                })
+                    .then(async r => {
+                        const res = await r.json().catch(() => null);
+                        if (!r.ok || !res || res.success === false) {
+                            throw new Error(res?.error || res?.message || 'Error submitting guest exam.');
+                        }
+                        return res;
+                    })
+                    .then(res => {
+                        showResults(res, timeLabel);
+                    })
+                    .catch(err => showError(err.message || 'Error submitting guest exam. Please try again.'));
+                return;
+            }
 
             const payload = {
                 attempt_id: examData.attempt_id,
@@ -1842,16 +2694,16 @@ const fragment = document.createDocumentFragment();
             };
 
             fetch('../partial/exam_submit.php', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json'
-                    },
-                    body: JSON.stringify(payload)
-                })
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(payload)
+            })
                 .then(r => r.json())
                 .then(res => {
                     if (res.success) {
-                        showResults(res, minutes + ':' + seconds);
+                        showResults(res, timeLabel);
                     } else {
                         showError('Error submitting exam. Please try again.');
                     }
@@ -1859,48 +2711,83 @@ const fragment = document.createDocumentFragment();
         }
 
         function showResults(data, timeTaken) {
-            const passed = data.score >= data.passing_score;
+            const displayScore = Number.isFinite(Number(data.grade))
+                ? Math.round(Number(data.grade))
+                : Math.round(Number(data.score || 0));
+            const passingScore = Number(data.passing_score || 0);
+            const passed = passingScore > 0 ? displayScore >= passingScore : !!data.passed;
             const statusText = passed ? 'Passed' : 'Failed';
-            document.getElementById('finalScore').innerHTML = `${data.score}%<div style="font-size: 1rem; margin-top: 0.5rem; font-weight: 600;">${statusText}</div>`;
+            document.getElementById('finalScore').innerHTML = `${displayScore}%<div style="font-size: 1rem; margin-top: 0.5rem; font-weight: 600;">${statusText}</div>`;
             document.getElementById('scoreCircle').className = 'score-circle ' + (passed ? 'score-pass' : 'score-fail');
             document.getElementById('resultsTitle').textContent = passed ? 'Congratulations! You Passed!' : 'Exam Completed';
 
-            document.getElementById('statCorrect').textContent = data.correct;
-            document.getElementById('statIncorrect').textContent = data.total - data.correct - (responses.filter(r => r === null).length);
-            document.getElementById('statUnanswered').textContent = responses.filter(r => r === null).length;
+            const correctCount = Number(data.correct || 0);
+            const totalCount = Number(data.total || (Array.isArray(examData.questions) ? examData.questions.length : 0));
+            const unansweredCount = Number.isFinite(Number(data.unanswered))
+                ? Number(data.unanswered)
+                : responses.filter(r => r === null).length;
+            const incorrectCount = Number.isFinite(Number(data.incorrect))
+                ? Number(data.incorrect)
+                : Math.max(0, totalCount - correctCount - unansweredCount);
+
+            document.getElementById('statCorrect').textContent = correctCount;
+            document.getElementById('statIncorrect').textContent = incorrectCount;
+            document.getElementById('statUnanswered').textContent = unansweredCount;
             document.getElementById('statTime').textContent = timeTaken;
 
             let detailed = '<h4 class="mt-4 mb-3 text-start">Detailed Results</h4>';
 
-            examData.questions.forEach((q, i) => {
-                const userAnswerId = responses[i];
-                const correctAnswer = q.choices.find(c => c.correct);
-                const userAnswer = q.choices.find(c => c.id === userAnswerId);
-                const isCorrect = userAnswerId && userAnswer && userAnswer.correct;
+            if (Array.isArray(data.details) && data.details.length) {
+                detailed += data.details.map((item, i) => {
+                    const isCorrect = !!item.is_correct;
+                    const userText = item.user_answer_text ? String(item.user_answer_text).replace(/^[A-D]\.\s*/i, '').trim() : null;
+                    const correctText = item.correct_answer_text ? String(item.correct_answer_text).replace(/^[A-D]\.\s*/i, '').trim() : 'N/A';
+                    const qText = item.question_text || '';
 
-                let cleanUserText = userAnswer ? userAnswer.text.replace(/^[A-D]\.\s*/i, '').trim() : null;
-                let cleanCorrectText = correctAnswer.text.replace(/^[A-D]\.\s*/i, '').trim();
-
-                detailed += `<div class="mb-4 p-3 border rounded text-start">
-                    <div class="fw-bold mb-2">Question ${i + 1}</div>
-                    <div class="mb-2">${q.text}</div>`;
-
-                if (userAnswer) {
-                    detailed += `<div class="review-answer ${isCorrect ? 'correct' : 'incorrect'} your">
-                        <strong>Your Answer:</strong> ${cleanUserText}
-                        ${isCorrect ? '<i class="fas fa-check-circle ms-2"></i>' : '<i class="fas fa-times-circle ms-2"></i>'}
+                    return `<div class="mb-4 p-3 border rounded text-start">
+                        <div class="fw-bold mb-2">Question ${i + 1}</div>
+                        <div class="mb-2">${qText}</div>
+                        <div class="review-answer ${isCorrect ? 'correct' : 'incorrect'} your">
+                            <strong>Your Answer:</strong> ${userText || 'Not answered'}
+                            ${userText ? (isCorrect ? '<i class="fas fa-check-circle ms-2"></i>' : '<i class="fas fa-times-circle ms-2"></i>') : ''}
+                        </div>
+                        <div class="review-answer correct">
+                            <strong>Correct Answer:</strong> ${correctText}
+                            <i class="fas fa-check-circle ms-2"></i>
+                        </div>
                     </div>`;
-                } else {
-                    detailed += `<div class="review-answer your">
-                        <strong>Your Answer:</strong> Not answered
-                    </div>`;
-                }
+                }).join('');
+            } else {
+                examData.questions.forEach((q, i) => {
+                    const userAnswerId = responses[i];
+                    const correctAnswer = Array.isArray(q.choices) ? q.choices.find(c => c.correct) : null;
+                    const userAnswer = Array.isArray(q.choices) ? q.choices.find(c => c.id === userAnswerId) : null;
+                    const isCorrect = userAnswerId && userAnswer && userAnswer.correct;
 
-                detailed += `<div class="review-answer correct">
-                    <strong>Correct Answer:</strong> ${cleanCorrectText}
-                    <i class="fas fa-check-circle ms-2"></i>
-                </div></div>`;
-            });
+                    let cleanUserText = userAnswer ? userAnswer.text.replace(/^[A-D]\.\s*/i, '').trim() : null;
+                    let cleanCorrectText = correctAnswer ? correctAnswer.text.replace(/^[A-D]\.\s*/i, '').trim() : 'N/A';
+
+                    detailed += `<div class="mb-4 p-3 border rounded text-start">
+                        <div class="fw-bold mb-2">Question ${i + 1}</div>
+                        <div class="mb-2">${q.text}</div>`;
+
+                    if (userAnswer) {
+                        detailed += `<div class="review-answer ${isCorrect ? 'correct' : 'incorrect'} your">
+                            <strong>Your Answer:</strong> ${cleanUserText}
+                            ${isCorrect ? '<i class="fas fa-check-circle ms-2"></i>' : '<i class="fas fa-times-circle ms-2"></i>'}
+                        </div>`;
+                    } else {
+                        detailed += `<div class="review-answer your">
+                            <strong>Your Answer:</strong> Not answered
+                        </div>`;
+                    }
+
+                    detailed += `<div class="review-answer correct">
+                        <strong>Correct Answer:</strong> ${cleanCorrectText}
+                        <i class="fas fa-check-circle ms-2"></i>
+                    </div></div>`;
+                });
+            }
 
             document.getElementById('detailedResults').innerHTML = detailed;
 
@@ -1953,6 +2840,31 @@ const fragment = document.createDocumentFragment();
         });
 
         document.getElementById('historyModal').addEventListener('show.bs.modal', function() {
+            if (IS_GUEST) {
+                let html = '<div class="table-responsive"><table class="history-table table table-striped"><thead><tr><th>Exam</th><th>Date</th><th>Score</th><th>Status</th></tr></thead><tbody>';
+                if (!EXAM_HISTORY.length) {
+                    html += '<tr><td colspan="4" class="text-center py-4">No exam history yet</td></tr>';
+                } else {
+                    EXAM_HISTORY.forEach(a => {
+                        const date = a.finished_at ? new Date(a.finished_at).toLocaleDateString() : new Date().toLocaleDateString();
+                        const score = Number(a.last_score ?? a.best_score ?? 0);
+                        const passing = Number(a.passing_score ?? 0);
+                        const status = score >= passing
+                            ? '<span class="text-success fw-bold">Passed</span>'
+                            : '<span class="text-danger fw-bold">Failed</span>';
+                        html += `<tr>
+                            <td>${a.title || 'Guest Exam Attempt'}</td>
+                            <td>${date}</td>
+                            <td><strong>${Math.round(score)}%</strong></td>
+                            <td>${status}</td>
+                        </tr>`;
+                    });
+                }
+                html += '</tbody></table></div>';
+                document.getElementById('historyBody').innerHTML = html;
+                return;
+            }
+
             fetch('../partial/exam_history.php')
                 .then(r => r.json())
                 .then(data => {
@@ -1979,7 +2891,7 @@ const fragment = document.createDocumentFragment();
         });
 
         document.querySelectorAll('.topic-tab').forEach(tab => {
-            tab.addEventListener('click', () => {
+            tab.addEventListener('click', async () => {
                 document.querySelectorAll('.topic-tab')
                     .forEach(t => t.classList.remove('active'));
 
@@ -1989,7 +2901,7 @@ const fragment = document.createDocumentFragment();
                 const category = CATEGORIES.find(c => slugify(c) === slug);
 
                 if (category) {
-                    renderExamsByCategory(category);
+                    await renderExamsByCategory(category);
                 }
             });
         });

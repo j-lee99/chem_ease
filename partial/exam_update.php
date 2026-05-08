@@ -21,7 +21,7 @@ $dur   = (int)($data['duration_minutes'] ?? 0);
 $pass  = (int)($data['passing_score'] ?? 0);
 $questions = $data['questions'] ?? [];
 
-if(!$title || !$cat || !$diff || $ques<1 || $dur<1 || $pass<0 || $pass>100 || count($questions)!=$ques){
+if(!$title || !$cat || !$diff || $ques<1 || $dur<1 || $pass<0 || $pass>100){
     echo json_encode(['success'=>false,'msg'=>'Invalid exam data']);
     exit;
 }

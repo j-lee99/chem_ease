@@ -821,8 +821,13 @@
                 let hasError = false;
 
                 /* ---------- Name ---------- */
-                if (!firstName || !lastName) {
-                    showError('fullNameError', 'Please enter your full name');
+                if (!firstName) {
+                    showError('firstNameError', 'Please enter your first name');
+                    hasError = true;
+                }
+
+                if (!lastName) {
+                    showError('lastNameError', 'Please enter your last name');
                     hasError = true;
                 }
 
@@ -913,7 +918,15 @@
                         })
                     });
 
-                    const data = await res.json();
+                    const responseText = await res.text();
+                    let data;
+
+                    try {
+                        data = JSON.parse(responseText);
+                    } catch (parseError) {
+                        console.error('Invalid JSON response from signup_api.php:', responseText);
+                        throw new Error('Invalid JSON response from server');
+                    }
 
                     btn.classList.remove('loading');
                     btn.disabled = false;
@@ -927,6 +940,7 @@
                     }
 
                 } catch (error) {
+                    console.log(error);
                     btn.classList.remove('loading');
                     btn.disabled = false;
                     btn.innerHTML = '<span id="btnText">Create account</span>';
@@ -961,6 +975,10 @@
 
             function showError(elementId, message) {
                 const errorElement = document.getElementById(elementId);
+                if (!errorElement) {
+                    console.warn(`Missing error element: ${elementId}`);
+                    return;
+                }
                 errorElement.textContent = message;
                 errorElement.classList.add('show');
             }
