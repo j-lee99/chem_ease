@@ -496,12 +496,40 @@ $cats = ['Analytical Chemistry', 'Organic Chemistry', 'Physical Chemistry', 'Ino
         }
 
         .guest-download-disabled {
-            opacity: 0.65;
-            cursor: not-allowed !important;
+            opacity: 0.8;
+            cursor: help !important;
             pointer-events: auto !important;
-            border-color: #6c757d !important;
-            color: #6c757d !important;
-            background: #f8f9fa !important;
+            border-color: #94a3b8 !important;
+            color: #64748b !important;
+            background: #f8fafc !important;
+            position: relative;
+        }
+
+        .guest-download-disabled:hover {
+            background: #e8f4f8 !important;
+            color: var(--primary-blue) !important;
+            border-color: var(--primary-blue) !important;
+            transform: translateY(-2px);
+        }
+
+        .material-card.module-locked {
+            border-color: rgba(245, 158, 11, 0.35);
+            box-shadow: 0 14px 45px rgba(245, 158, 11, 0.12);
+        }
+
+        .module-lock-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.35rem;
+            width: fit-content;
+            margin-bottom: 0.85rem;
+            padding: 0.3rem 0.65rem;
+            border-radius: 999px;
+            border: 1px solid rgba(245, 158, 11, 0.32);
+            background: rgba(245, 158, 11, 0.12);
+            color: #92400e;
+            font-size: 0.78rem;
+            font-weight: 700;
         }
 
         .material-card.guest-locked {
@@ -1109,7 +1137,7 @@ $cats = ['Analytical Chemistry', 'Organic Chemistry', 'Physical Chemistry', 'Ino
                                                     }
                                                 }
                                             ?>
-                                                <div class="material-item" data-file-id="<?= $f['id'] ?>" data-file-name="<?= htmlspecialchars($displayName) ?>" data-file-type="<?= $f['type'] ?>">
+                                                <div class="material-item" data-file-id="<?= $f['id'] ?>" data-file-name="<?= htmlspecialchars($displayName) ?>" data-file-type="<?= $f['type'] ?>" data-file-path="<?= htmlspecialchars($f['path']) ?>">
                                                     <div class="material-item-left">
                                                         <i class="fas <?= $icon ?> fa-xl"></i>
                                                         <div class="material-item-info">
@@ -1127,9 +1155,12 @@ $cats = ['Analytical Chemistry', 'Organic Chemistry', 'Physical Chemistry', 'Ino
                                                                     type="button"
                                                                     class="download-btn guest-download-disabled"
                                                                     data-fid="<?= $f['id'] ?>"
-                                                                    title="PDF downloads are disabled in guest mode"
+                                                                    title="Downloadable content can be unlocked when signed in"
+                                                                    data-bs-toggle="tooltip"
+                                                                    data-bs-placement="top"
+                                                                    data-bs-title="Downloadable content can be unlocked when signed in"
                                                                     aria-disabled="true">
-                                                                    <i class="fas fa-lock"></i>
+                                                                    <i class="fas fa-download"></i>
                                                                 </button>
                                                             <?php else: ?>
                                                                 <a
@@ -1205,10 +1236,10 @@ $cats = ['Analytical Chemistry', 'Organic Chemistry', 'Physical Chemistry', 'Ino
                 <div class="modal-body">
                     <div class="d-flex gap-3 align-items-start">
                         <div class="d-inline-flex align-items-center justify-content-center rounded-circle bg-info bg-opacity-10 text-info flex-shrink-0" style="width:46px;height:46px;">
-                            <i class="fas fa-lock"></i>
+                            <i class="fas fa-download"></i>
                         </div>
                         <div>
-                            <h6 class="fw-bold mb-2">PDF downloads are disabled in guest mode.</h6>
+                            <h6 class="fw-bold mb-2">Downloadable content unlocks when signed in.</h6>
                             <p class="mb-0 text-muted">You can still view all study materials as a guest. Sign in or create an account to download PDFs and keep your progress.</p>
                         </div>
                     </div>
@@ -1235,6 +1266,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const MATERIAL_PROGRESS = new Map();
     const MATERIAL_META = new Map();
     const CATEGORY_MODULE_INDEX = new Map();
+    const YOUTUBE_TITLE_CACHE = new Map();
 
     const __progressState = {
         lastSavedPct: new Map(),
@@ -1277,6 +1309,8 @@ document.addEventListener('DOMContentLoaded', () => {
         if (postTestReady && progressReady) {
             prereqBootstrapDone = true;
             setLearningButtonsDisabled(false);
+            refreshModuleLockBadges();
+            initGuestDownloadTooltips();
             hidePrereqLoader();
         }
     }
@@ -1368,13 +1402,36 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function isFirstUnlockedModuleForGuest(materialId) {
-        // Guests can now access every study-material module.
-        return true;
+        const current = MATERIAL_META.get(String(materialId));
+        if (!current) return true;
+        const items = CATEGORY_MODULE_INDEX.get(current.categoryKey) || [];
+        if (!items.length) return true;
+        return String(items[0].materialId) === String(materialId);
+    }
+
+    function getMaterialLockReason(materialId) {
+        const previousMeta = getPreviousMaterialMeta(materialId);
+        if (!previousMeta) return null;
+
+        if (!isMaterialComplete(previousMeta.materialId)) {
+            return { previousMeta, reason: 'not_finished' };
+        }
+
+        const status = getPostTestStatusForMaterial(previousMeta);
+        if (!status) {
+            return { previousMeta, reason: 'not_taken' };
+        }
+
+        if (status.passed !== true) {
+            return { previousMeta, reason: 'failed' };
+        }
+
+        return null;
     }
 
     function isGuestModuleAllowed(materialId) {
-        // Guests can view all materials. Only PDF downloads are restricted.
-        return true;
+        // Guests now follow the same module-gating rule as real users.
+        return getMaterialLockReason(materialId) === null;
     }
 
     async function ensureGuestModuleSelectionFromTrigger(triggerEl) {
@@ -1393,10 +1450,35 @@ document.addEventListener('DOMContentLoaded', () => {
         return true;
     }
 
+    function refreshModuleLockBadges() {
+        document.querySelectorAll('.material-card.module-locked').forEach(card => card.classList.remove('module-locked'));
+        document.querySelectorAll('.module-lock-badge').forEach(badge => badge.remove());
+
+        document.querySelectorAll('.material-card').forEach(card => {
+            const materialId = String(card.dataset.id || '');
+            const lock = getMaterialLockReason(materialId);
+            if (!lock) return;
+
+            card.classList.add('module-locked');
+            const title = card.querySelector('.card-title');
+            if (!title) return;
+
+            const label = lock.reason === 'not_finished'
+                ? 'Complete previous module first'
+                : lock.reason === 'not_taken'
+                    ? 'Take previous post-test first'
+                    : 'Pass previous post-test first';
+
+            title.insertAdjacentHTML('beforebegin', `
+                <span class="module-lock-badge">
+                    <i class="fas fa-lock"></i>${label}
+                </span>
+            `);
+        });
+    }
+
     function applyGuestModuleLockBadges() {
-        // No module lock badges in guest mode because all study materials are viewable.
-        document.querySelectorAll('.material-card.guest-locked').forEach(card => card.classList.remove('guest-locked'));
-        document.querySelectorAll('.guest-lock-badge').forEach(badge => badge.remove());
+        refreshModuleLockBadges();
     }
 
     function refreshMaterialProgressState(materialId) {
@@ -1443,25 +1525,54 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
+    function addPostTestStatusFromExamRow(e) {
+        if (!e || !e.title) return;
+        const moduleCode = parseModuleCodeFromPostTestTitle(e.title);
+        if (!moduleCode) return;
+
+        const categoryKey = normalizeCategory(e.category);
+        const bestRaw = e.user_score ?? e.score ?? e.grade ?? e.raw_percent ?? null;
+        const passingRaw = e.passing_score ?? e.passing ?? null;
+        const bestPct = (bestRaw !== null && bestRaw !== undefined && bestRaw !== '') ? Math.round(Number(bestRaw)) : null;
+        const passingPct = (passingRaw !== null && passingRaw !== undefined && passingRaw !== '') ? Math.round(Number(passingRaw)) : 75;
+        const statusText = String(e.status || '').toLowerCase();
+        const passed = statusText === 'passed' || (bestPct !== null && passingPct !== null && bestPct >= passingPct);
+
+        POSTTEST_STATUS.set(`${categoryKey}::${moduleCode}`, {
+            passed,
+            bestPct,
+            passingPct,
+            rawTitle: e.title
+        });
+    }
+
+    async function loadGuestPostTestStatus() {
+        try {
+            const r = await fetchWithTimeout('../partial/exam_history.php', { cache: 'no-store' }, 10000);
+            if (!r.ok) throw new Error(`HTTP ${r.status}`);
+            const history = await r.json();
+            if (Array.isArray(history)) {
+                history.forEach(addPostTestStatusFromExamRow);
+            }
+        } catch (err) {
+            console.warn('Guest exam history unavailable for study-material locks:', err);
+        }
+    }
+
     async function loadPostTestStatus() {
         try {
+            POSTTEST_STATUS.clear();
+
+            if (IS_GUEST) {
+                await loadGuestPostTestStatus();
+                return;
+            }
+
             const r = await fetchWithTimeout('../partial/exam_list.php', { cache: 'no-store' }, 10000);
             if (!r.ok) throw new Error(`HTTP ${r.status}`);
             const j = await r.json();
             const exams = Array.isArray(j.data) ? j.data : [];
-
-            POSTTEST_STATUS.clear();
-            for (const e of exams) {
-                const moduleCode = parseModuleCodeFromPostTestTitle(e.title);
-                if (!moduleCode) continue;
-
-                const categoryKey = normalizeCategory(e.category);
-                const bestPct = (e.user_score !== null && e.user_score !== undefined) ? Math.round(Number(e.user_score)) : null;
-                const passingPct = (e.passing_score !== null && e.passing_score !== undefined) ? Math.round(Number(e.passing_score)) : null;
-                const passed = bestPct !== null && passingPct !== null && bestPct >= passingPct;
-
-                POSTTEST_STATUS.set(`${categoryKey}::${moduleCode}`, { passed, bestPct, passingPct, rawTitle: e.title });
-            }
+            exams.forEach(addPostTestStatusFromExamRow);
         } catch (err) {
             console.error('Failed to load post-test status:', err);
         } finally {
@@ -1591,9 +1702,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
         try {
             if (IS_GUEST) {
-                postTestReady = true;
                 guestSelectedModule = getGuestSelectedModuleFromBrowser();
-                applyGuestModuleLockBadges();
+                await loadPostTestStatus();
                 await loadProgressData();
             } else {
                 await loadPostTestStatus();
@@ -1618,7 +1728,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (reason === 'not_finished') return "Locked content: You haven't finished the previous module yet. Complete it (100%) before proceeding.";
         if (reason === 'not_taken') return "Locked content: You haven't taken the previous module's post test yet. Take and pass it to unlock the next module.";
         if (reason === 'failed') return 'Locked content: You failed to pass the exam. Please review the previous module/lesson and try again.';
-        if (reason === 'guest_signup_required') return 'Guest mode allows viewing all study materials, but PDF downloads are disabled. Sign up or sign in to download files and keep your progress.';
+        if (reason === 'guest_signup_required') return 'This module is locked. Complete the previous module and pass its post-test first. Sign in to save progress permanently and unlock downloads.';
         return def;
     }
 
@@ -1646,6 +1756,13 @@ document.addEventListener('DOMContentLoaded', () => {
         bootstrap.Modal.getOrCreateInstance(modalEl).show();
     }
 
+    function initGuestDownloadTooltips() {
+        if (!window.bootstrap?.Tooltip) return;
+        document.querySelectorAll('[data-bs-toggle="tooltip"]').forEach(el => {
+            bootstrap.Tooltip.getOrCreateInstance(el);
+        });
+    }
+
     function enforcePrerequisitesFromButton(btnEl) {
         if (!prereqBootstrapDone) {
             // Fail open after showing/hiding loader quickly so clicks do not feel broken.
@@ -1659,30 +1776,11 @@ document.addEventListener('DOMContentLoaded', () => {
             if (!card) return true;
             const currentId = String(card.dataset.id || '');
 
-            if (IS_GUEST) {
-                return true;
-            }
+            const lock = getMaterialLockReason(currentId);
+            if (!lock) return true;
 
-            const previousMeta = getPreviousMaterialMeta(currentId);
-            if (!previousMeta) return true;
-
-            if (!isMaterialComplete(previousMeta.materialId)) {
-                showPrereqModal(previousMeta.materialId, 'not_finished');
-                return false;
-            }
-
-            const status = getPostTestStatusForMaterial(previousMeta);
-            if (!status) {
-                showPrereqModal(previousMeta.materialId, 'not_taken');
-                return false;
-            }
-
-            if (status.passed !== true) {
-                showPrereqModal(previousMeta.materialId, 'failed');
-                return false;
-            }
-
-            return true;
+            showPrereqModal(lock.previousMeta.materialId, lock.reason);
+            return false;
         } catch (err) {
             console.error('Prereq check failed:', err);
             return true;
@@ -1712,18 +1810,58 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     async function getYouTubeTitle(videoUrl) {
-        // Non-blocking client-side only. Never call YouTube from PHP render.
+        const url = String(videoUrl || '').trim();
+        if (!url) return 'YouTube Video';
+
+        const videoIdMatch = url.match(/(?:youtu\.be\/|youtube\.com(?:\/embed\/|\/v\/|\/watch\?v=|\/watch\?.+&v=))([^"&?\/\s]{11})/i);
+        if (!videoIdMatch) return 'YouTube Video';
+
+        const videoId = videoIdMatch[1];
+        if (YOUTUBE_TITLE_CACHE.has(videoId)) {
+            return YOUTUBE_TITLE_CACHE.get(videoId);
+        }
+
         try {
-            const videoIdMatch = String(videoUrl || '').match(/(?:youtu\.be\/|youtube\.com(?:\/embed\/|\/v\/|\/watch\?v=|\/watch\?.+&v=))([^"&?\/\s]{11})/i);
-            if (!videoIdMatch) return 'YouTube Video';
-            const videoId = videoIdMatch[1];
-            const response = await fetch(`https://www.youtube.com/oembed?url=https://www.youtube.com/watch?v=${videoId}&format=json`);
-            if (!response.ok) return 'YouTube Video';
+            const response = await fetch(`https://www.youtube.com/oembed?url=https://www.youtube.com/watch?v=${encodeURIComponent(videoId)}&format=json`, {
+                cache: 'force-cache'
+            });
+
+            if (!response.ok) throw new Error(`YouTube oEmbed HTTP ${response.status}`);
+
             const data = await response.json();
-            return data.title || 'YouTube Video';
+            const title = String(data.title || '').trim() || 'YouTube Video';
+            YOUTUBE_TITLE_CACHE.set(videoId, title);
+            return title;
         } catch (err) {
+            console.warn('Unable to fetch YouTube title:', err);
+            YOUTUBE_TITLE_CACHE.set(videoId, 'YouTube Video');
             return 'YouTube Video';
         }
+    }
+
+    function shouldFetchVideoTitle(title) {
+        const value = String(title || '').trim();
+        return value === '' || value === 'Untitled Video' || value === 'YouTube Video' || value === 'Video Lesson';
+    }
+
+    async function hydrateYouTubeTitles() {
+        const videoItems = Array.from(document.querySelectorAll('.material-item[data-file-type="youtube"], .material-item[data-file-type="video"]'));
+
+        await Promise.all(videoItems.map(async item => {
+            const currentTitle = item.dataset.fileName || item.querySelector('.file-title')?.textContent || '';
+            if (!shouldFetchVideoTitle(currentTitle)) return;
+
+            const path = item.dataset.filePath || '';
+            const title = await getYouTubeTitle(path);
+            if (!title || title === 'YouTube Video') return;
+
+            item.dataset.fileName = title;
+            const titleEl = item.querySelector('.file-title');
+            if (titleEl) {
+                titleEl.textContent = title;
+                titleEl.title = title;
+            }
+        }));
     }
 
     function createModal(title = 'Viewer', extraClass = '') {
@@ -2065,7 +2203,10 @@ document.addEventListener('DOMContentLoaded', () => {
                 return;
             }
 
-            const title = d.title || (d.type === 'pdf' ? 'PDF Document' : 'Video Lesson');
+            let title = d.title || (d.type === 'pdf' ? 'PDF Document' : 'Video Lesson');
+            if ((d.type === 'youtube' || d.type === 'video') && shouldFetchVideoTitle(title)) {
+                title = await getYouTubeTitle(d.path);
+            }
             const modal = createModal(title, 'custom-modal');
             const body = modal.querySelector('#viewerBody');
 
@@ -2145,12 +2286,6 @@ document.addEventListener('DOMContentLoaded', () => {
             link.addEventListener('click', async e => {
                 e.stopPropagation();
 
-                if (IS_GUEST) {
-                    e.preventDefault();
-                    showGuestDownloadModal();
-                    return;
-                }
-
                 if (!(await ensureGuestModuleSelectionFromTrigger(link))) {
                     e.preventDefault();
                     showPrereqModal(null, 'guest_signup_required');
@@ -2164,6 +2299,12 @@ document.addEventListener('DOMContentLoaded', () => {
                     }
                 } else {
                     bypassPrereqOnce = false;
+                }
+
+                if (IS_GUEST) {
+                    e.preventDefault();
+                    showGuestDownloadModal();
+                    return;
                 }
             });
         });
@@ -2277,6 +2418,7 @@ document.addEventListener('DOMContentLoaded', () => {
         postTestReady = true;
         progressReady = true;
         setLearningButtonsDisabled(false);
+        hydrateYouTubeTitles();
         hidePrereqLoader();
     });
 });

@@ -926,6 +926,7 @@ if (!isset($_SESSION['user_id']) || !in_array($role, ['admin', 'super_admin'], t
                 <?php endif; ?>
             </div>
             
+            <?php if ($isSuperAdmin): ?>
             <div class="card shadow-sm border-0 mb-4">
                 <div class="card-header bg-white d-flex justify-content-between align-items-center flex-wrap gap-2">
                     <div>
@@ -988,30 +989,11 @@ if (!isset($_SESSION['user_id']) || !in_array($role, ['admin', 'super_admin'], t
                         </div>
                     </div>
             
-                    <hr class="my-4">
-            
-                    <h6 class="fw-bold mb-3">Recent Visits</h6>
-                    <div class="table-responsive">
-                        <table class="table table-sm align-middle">
-                            <thead>
-                                <tr>
-                                    <th>Visitor</th>
-                                    <th>Role</th>
-                                    <th>Page</th>
-                                    <th>Visited At</th>
-                                </tr>
-                            </thead>
-                            <tbody id="recentVisitsTable">
-                                <tr>
-                                    <td colspan="4" class="text-muted">Loading...</td>
-                                </tr>
-                            </tbody>
-                        </table>
-                    </div>
                 </div>
             </div>
             
-            <!-- Charts Section -->
+<?php endif; ?>
+                        <!-- Charts Section -->
             <div class="charts-section">
                 <?php
                 // User Growth (last 6 months)
@@ -1739,18 +1721,6 @@ if (!isset($_SESSION['user_id']) || !in_array($role, ['admin', 'super_admin'], t
                     return String(n);
                 }
             }
-            
-            function formatVisitDate(value) {
-                if (!value) return '—';
-            
-                const date = new Date(String(value).replace(' ', 'T'));
-                if (Number.isNaN(date.getTime())) {
-                    return value;
-                }
-            
-                return date.toLocaleString();
-            }
-            
             function renderVisitBars(containerId, rows, labelKey, valueKey) {
                 const container = document.getElementById(containerId);
                 if (!container) return;
@@ -1780,34 +1750,6 @@ if (!isset($_SESSION['user_id']) || !in_array($role, ['admin', 'super_admin'], t
                     `;
                 }).join('');
             }
-            
-            function renderRecentVisits(rows) {
-                const tbody = document.getElementById('recentVisitsTable');
-                if (!tbody) return;
-            
-                if (!Array.isArray(rows) || rows.length === 0) {
-                    tbody.innerHTML = `
-                        <tr>
-                            <td colspan="4" class="text-muted">No recent visits yet.</td>
-                        </tr>
-                    `;
-                    return;
-                }
-            
-                tbody.innerHTML = rows.map(row => {
-                    const role = row.role || 'unknown';
-            
-                    return `
-                        <tr>
-                            <td>${escapeVisitHtml(row.name || 'Unknown')}</td>
-                            <td><span class="role-pill ${escapeVisitHtml(role)}">${escapeVisitHtml(role)}</span></td>
-                            <td>${escapeVisitHtml(row.page || 'unknown')}</td>
-                            <td>${escapeVisitHtml(formatVisitDate(row.visited_at))}</td>
-                        </tr>
-                    `;
-                }).join('');
-            }
-            
             async function loadVisitStats() {
                 const range = document.getElementById('visitRange')?.value || '7d';
             
@@ -1831,33 +1773,23 @@ if (!isset($_SESSION['user_id']) || !in_array($role, ['admin', 'super_admin'], t
             
                     renderVisitBars('visitsByPage', data.by_page || [], 'page', 'visits');
                     renderVisitBars('dailyVisits', data.daily || [], 'date', 'visits');
-                    renderRecentVisits(data.recent || []);
                 } catch (error) {
                     console.error(error);
             
                     const byPage = document.getElementById('visitsByPage');
                     const daily = document.getElementById('dailyVisits');
-                    const recent = document.getElementById('recentVisitsTable');
             
                     if (byPage) byPage.innerHTML = '<div class="text-danger">Failed to load visit stats.</div>';
                     if (daily) daily.innerHTML = '<div class="text-danger">Failed to load visit stats.</div>';
-                    if (recent) {
-                        recent.innerHTML = `
-                            <tr>
-                                <td colspan="4" class="text-danger">Failed to load recent visits.</td>
-                            </tr>
-                        `;
-                    }
                 }
             }
             
             document.addEventListener('DOMContentLoaded', () => {
-                loadVisitStats();
-            
                 const range = document.getElementById('visitRange');
-                if (range) {
-                    range.addEventListener('change', loadVisitStats);
-                }
+                if (!range) return;
+
+                loadVisitStats();
+                range.addEventListener('change', loadVisitStats);
             });
         
     </script>

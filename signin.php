@@ -439,23 +439,10 @@
 
                 <div class="auth-divider">or explore first</div>
 
-                <div class="guest-preview-box" aria-label="Guest access preview">
-                    <div class="guest-preview-title">
-                        <i class="fas fa-eye"></i>
-                        Try ChemEase without creating an account
-                    </div>
-                    <ul class="guest-preview-list">
-                        <li><i class="fas fa-check-circle"></i>View study materials</li>
-                        <li><i class="fas fa-check-circle"></i>Preview post tests</li>
-                        <li><i class="fas fa-check-circle"></i>Explore tools</li>
-                        <li><i class="fas fa-lock"></i>Downloads require sign in</li>
-                    </ul>
-                </div>
                 
                 <button type="button" class="submit-btn-guest" id="guestBtn">
                     <span id="guestBtnText" class="guest-btn-content">
                         <span class="guest-btn-main"><i class="fas fa-user-clock"></i> Continue as Guest</span>
-                        <span class="guest-btn-sub">Your guest progress stays in this browser session</span>
                     </span>
                 </button>
             </form>

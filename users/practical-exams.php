@@ -1569,6 +1569,12 @@ foreach ($cats as $guestCat) {
             return u.toString();
         }
 
+
+        function goToTakeExamPage(examId) {
+            if (!examId) return;
+            window.location.href = `take-exam.php?exam_id=${encodeURIComponent(examId)}`;
+        }
+
         async function syncGuestExamProgressAfterSignup() {
             if (IS_GUEST || !HAS_GUEST_EXAM_PROGRESS) return;
             try {
@@ -2372,7 +2378,7 @@ foreach ($cats as $guestCat) {
                     return;
                 }
 
-                startExam(examId);
+                goToTakeExamPage(examId);
                 return;
             }
 
@@ -2438,11 +2444,7 @@ foreach ($cats as $guestCat) {
                     return;
                 }
 
-                if (IS_GUEST) {
-                    startExam(examId);
-                } else {
-                    window.location.href = `take-exam.php?exam_id=${examId}`;
-                }
+                goToTakeExamPage(examId);
                 return;
             }
 
@@ -2455,11 +2457,7 @@ foreach ($cats as $guestCat) {
                     return;
                 }
 
-                if (IS_GUEST) {
-                    startExam(examId);
-                } else {
-                    window.location.href = `take-exam.php?exam_id=${examId}`;
-                }
+                goToTakeExamPage(examId);
                 return;
             }
 
@@ -2472,11 +2470,7 @@ foreach ($cats as $guestCat) {
                     return;
                 }
 
-                if (IS_GUEST) {
-                    startExam(examId);
-                } else {
-                    window.location.href = `take-exam.php?exam_id=${examId}`;
-                }
+                goToTakeExamPage(examId);
                 return;
             }
 
