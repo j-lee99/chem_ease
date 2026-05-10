@@ -589,7 +589,7 @@ if ($isGuestUser) {
                         </div>
                         <div class="stat-box">
                             <div class="stat-value" id="statUnanswered">0</div>
-                            <div class="stat-label">Unanswered</div>
+                            <div class="stat-label">Total Questions</div>
                         </div>
                         <div class="stat-box">
                             <div class="stat-value" id="statTime">00:00</div>
@@ -993,7 +993,8 @@ if ($isGuestUser) {
 
             console.log('RESULT DATA:', data);
             document.getElementById('finalScore').innerHTML = `
-                        <div>${rawPercent.toFixed(2)}%</div>
+                        <div>${grade.toFixed(2)}%</div>
+                        <div class="score-sub">Grade</div>
             `;
 
             const existingPassingLine = document.getElementById('passingLine');
@@ -1007,7 +1008,7 @@ if ($isGuestUser) {
             passingLine.style.color = '#6b7280';
             passingLine.style.fontSize = '0.9rem';
             passingLine.innerHTML = passingGrade > 0 ?
-                `Passing Grade: ${passingGrade}% • Required Correct: ${requiredCorrect}/${total}` :
+                `Passing Grade: ${passingGrade}%` :
                 `Passing: N/A`;
 
             const scoreCircleEl = document.getElementById('scoreCircle');
@@ -1021,7 +1022,7 @@ if ($isGuestUser) {
 
             const incorrect = Math.max(0, answered - correct);
             document.getElementById('statIncorrect').textContent = incorrect;
-            document.getElementById('statUnanswered').textContent = Math.max(0, total - answered);
+            document.getElementById('statUnanswered').textContent = total;
             document.getElementById('statTime').textContent = timeTaken;
 
             // Detailed Results
@@ -1030,28 +1031,42 @@ if ($isGuestUser) {
                 <div class="details-scroll">
             `;
 
-            examData.questions.forEach((q, i) => {
-                const userAnswerId = responses[q.id];
-                const userAnswer = q.choices.find(c => c.id == userAnswerId);
-                const correctAnswer = q.choices.find(c => c.correct);
+            const resultDetailsByQuestionId = new Map();
+            if (Array.isArray(data.details)) {
+                data.details.forEach(detail => {
+                    resultDetailsByQuestionId.set(Number(detail.question_id), detail);
+                });
+            }
 
-                const cleanUserText = userAnswer ? userAnswer.text.replace(/^[A-D]\.\s*/i, '').trim() : 'Not answered';
-                const cleanCorrectText = correctAnswer ? correctAnswer.text.replace(/^[A-D]\.\s*/i, '').trim() : '';
+            examData.questions.forEach((q, i) => {
+                const resultDetail = resultDetailsByQuestionId.get(Number(q.id)) || null;
+                const userAnswerId = responses[q.id];
+                const userAnswer = q.choices.find(c => Number(c.id) === Number(userAnswerId));
+
+                const serverUserText = resultDetail?.user_answer_text ?? null;
+                const serverCorrectText = resultDetail?.correct_answer_text ?? null;
+                const serverIsCorrect = resultDetail?.is_correct === true || resultDetail?.is_correct === 1 || resultDetail?.is_correct === '1';
+                const serverIsAnswered = resultDetail?.is_answered === true || resultDetail?.is_answered === 1 || resultDetail?.is_answered === '1';
+
+                const cleanUserText = serverUserText
+                    ? String(serverUserText).replace(/^[A-D]\.\s*/i, '').trim()
+                    : (userAnswer ? String(userAnswer.text).replace(/^[A-D]\.\s*/i, '').trim() : 'Not answered');
+
+                const cleanCorrectText = serverCorrectText
+                    ? String(serverCorrectText).replace(/^[A-D]\.\s*/i, '').trim()
+                    : 'Correct answer unavailable';
 
                 let userPillClass = 'pill-unanswered';
                 let userIcon = '<i class="fa-solid fa-circle-question pill-icon"></i>';
 
-                if (userAnswerId !== undefined && userAnswer) {
-                    if (userAnswer.correct) {
+                if (serverIsAnswered || userAnswerId !== undefined) {
+                    if (serverIsCorrect) {
                         userPillClass = 'pill-correct';
                         userIcon = '<i class="fa-solid fa-circle-check pill-icon"></i>';
                     } else {
                         userPillClass = 'pill-wrong';
                         userIcon = '<i class="fa-solid fa-circle-xmark pill-icon"></i>';
                     }
-                } else {
-                    userPillClass = 'pill-unanswered';
-                    userIcon = '<i class="fa-solid fa-circle-question pill-icon"></i>';
                 }
 
                 detailsHtml += `

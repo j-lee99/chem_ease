@@ -248,33 +248,82 @@ try {
         throw new Exception('Exam total_questions is invalid.');
     }
 
-    /*
-     * IMPORTANT:
-     * Always create a NEW attempt row for every exam start.
-     *
-     * The previous implementation looked for an existing row by user_id + exam_id,
-     * reset its score to NULL, deleted its responses, and reused the same attempt id.
-     * That erased previous attempts whenever the user retook or intentionally left an exam.
-     *
-     * Keeping one row per attempt allows:
-     * - complete attempt history
-     * - best score calculation
-     * - average score calculation
-     * - failed/abandoned attempts without deleting old passing scores
-     */
-    $insertAttemptStmt = $conn->prepare("
-        INSERT INTO user_exam_attempts (user_id, exam_id, started_at)
-        VALUES (?, ?, NOW())
+    $attemptStmt = $conn->prepare("
+        SELECT id
+        FROM user_exam_attempts
+        WHERE user_id = ? AND exam_id = ?
+        LIMIT 1
     ");
 
-    if (!$insertAttemptStmt) {
-        throw new Exception('Failed to prepare attempt insert query.');
+    if (!$attemptStmt) {
+        throw new Exception('Failed to prepare attempt lookup query.');
     }
 
-    $insertAttemptStmt->bind_param("ii", $userId, $examId);
-    $insertAttemptStmt->execute();
-    $attemptId = (int)$conn->insert_id;
-    $insertAttemptStmt->close();
+    $attemptStmt->bind_param("ii", $userId, $examId);
+    $attemptStmt->execute();
+    $attemptResult = $attemptStmt->get_result();
+
+    if ($attemptRow = $attemptResult->fetch_assoc()) {
+        $attemptId = (int)$attemptRow['id'];
+
+        $setParts = [
+            "started_at = NOW()",
+            "finished_at = NULL",
+            "score = NULL",
+            "total_correct = NULL",
+            "total_answered = NULL"
+        ];
+
+        if (column_exists($conn, 'user_exam_attempts', 'raw_percent')) {
+            $setParts[] = "raw_percent = NULL";
+        }
+
+        if (column_exists($conn, 'user_exam_attempts', 'transmuted_grade')) {
+            $setParts[] = "transmuted_grade = NULL";
+        }
+
+        if (column_exists($conn, 'user_exam_attempts', 'passed')) {
+            $setParts[] = "passed = NULL";
+        }
+
+        $resetSql = "UPDATE user_exam_attempts SET " . implode(', ', $setParts) . " WHERE id = ?";
+        $resetStmt = $conn->prepare($resetSql);
+
+        if (!$resetStmt) {
+            throw new Exception('Failed to prepare attempt reset query.');
+        }
+
+        $resetStmt->bind_param("i", $attemptId);
+        $resetStmt->execute();
+        $resetStmt->close();
+
+        $deleteResponsesStmt = $conn->prepare("DELETE FROM user_exam_responses WHERE attempt_id = ?");
+        if (!$deleteResponsesStmt) {
+            throw new Exception('Failed to prepare response cleanup query.');
+        }
+        $deleteResponsesStmt->bind_param("i", $attemptId);
+        $deleteResponsesStmt->execute();
+        $deleteResponsesStmt->close();
+
+        $deleteAttemptQuestionsStmt = $conn->prepare("DELETE FROM attempt_questions WHERE attempt_id = ?");
+        if (!$deleteAttemptQuestionsStmt) {
+            throw new Exception('Failed to prepare attempt questions cleanup query.');
+        }
+        $deleteAttemptQuestionsStmt->bind_param("i", $attemptId);
+        $deleteAttemptQuestionsStmt->execute();
+        $deleteAttemptQuestionsStmt->close();
+    } else {
+        $insertAttemptStmt = $conn->prepare("INSERT INTO user_exam_attempts (user_id, exam_id, started_at) VALUES (?, ?, NOW())");
+        if (!$insertAttemptStmt) {
+            throw new Exception('Failed to prepare attempt insert query.');
+        }
+        $insertAttemptStmt->bind_param("ii", $userId, $examId);
+        $insertAttemptStmt->execute();
+        $attemptId = (int)$conn->insert_id;
+        $insertAttemptStmt->close();
+    }
+
+    $attemptStmt->close();
 
     $countStmt = $conn->prepare("SELECT COUNT(*) AS total FROM exam_questions WHERE exam_id = ?");
     if (!$countStmt) {
